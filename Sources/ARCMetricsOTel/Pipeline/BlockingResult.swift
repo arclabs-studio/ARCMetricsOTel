@@ -18,15 +18,12 @@ final class BlockingResult<Success: Sendable>: Sendable {
     private let condition = NSCondition()
     private let state = Mutex(State())
 
-    /// Runs `operation` and stores its outcome.
-    func resolve(_ operation: () async throws -> Success) async {
-        let outcome: Result<Success, any Error>
-        do {
-            outcome = try await .success(operation())
-        } catch {
-            outcome = .failure(error)
-        }
-        store(outcome)
+    /// Stores `outcome` and wakes the waiting thread.
+    func resolve(_ outcome: Result<Success, any Error>) {
+        condition.lock()
+        state.withLock { $0 = State(outcome: outcome, isResolved: true) }
+        condition.signal()
+        condition.unlock()
     }
 
     /// Blocks until ``resolve(_:)`` has stored an outcome or `deadline` passes. Returns the
@@ -36,12 +33,5 @@ final class BlockingResult<Success: Sendable>: Sendable {
         defer { condition.unlock() }
         while !state.withLock({ $0.isResolved }), condition.wait(until: deadline) {}
         return state.withLock { $0.isResolved ? $0.outcome : nil }
-    }
-
-    private func store(_ outcome: Result<Success, any Error>) {
-        condition.lock()
-        state.withLock { $0 = State(outcome: outcome, isResolved: true) }
-        condition.signal()
-        condition.unlock()
     }
 }

@@ -38,8 +38,10 @@ final class OTLPHTTPClient: HTTPClient {
         let outcome = BlockingResult<HTTPURLResponse>()
         let session = session
         let delivery = Task {
-            await outcome.resolve {
-                try await Self.deliver(request, with: session)
+            do {
+                try await outcome.resolve(.success(Self.deliver(request, with: session)))
+            } catch {
+                outcome.resolve(.failure(error))
             }
         }
         if let result = outcome.wait(until: Date(timeIntervalSinceNow: waitLimit(request))) {
