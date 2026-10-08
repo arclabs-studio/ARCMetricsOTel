@@ -16,10 +16,27 @@ let package = Package(name: "ARCMetricsOTel",
                                  .library(name: "ARCMetricsOTelMocks",
                                           targets: ["ARCMetricsOTelMocks"])],
 
+                      // MARK: - Dependencies
+
+                      // Approved third-party exception for this package only — see
+                      // docs/adr/0001-opentelemetry-swift-dependency.md.
+                      dependencies: [.package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git",
+                                              .upToNextMinor(from: "2.6.0")),
+                                     .package(url: "https://github.com/open-telemetry/opentelemetry-swift.git",
+                                              .upToNextMinor(from: "2.6.0"))],
+
                       // MARK: - Targets
 
                       targets: [// Main library
                           .target(name: "ARCMetricsOTel",
+                                  dependencies: [.product(name: "OpenTelemetryApi",
+                                                          package: "opentelemetry-swift-core"),
+                                                 .product(name: "OpenTelemetrySdk",
+                                                          package: "opentelemetry-swift-core"),
+                                                 .product(name: "OpenTelemetryProtocolExporterHTTP",
+                                                          package: "opentelemetry-swift"),
+                                                 .product(name: "PersistenceExporter",
+                                                          package: "opentelemetry-swift")],
                                   path: "Sources/ARCMetricsOTel"),
 
                           // Test doubles for consumers of ARCMetricsOTel
@@ -29,7 +46,10 @@ let package = Package(name: "ARCMetricsOTel",
 
                           // Tests
                           .testTarget(name: "ARCMetricsOTelTests",
-                                      dependencies: ["ARCMetricsOTel", "ARCMetricsOTelMocks"],
+                                      dependencies: ["ARCMetricsOTel",
+                                                     "ARCMetricsOTelMocks",
+                                                     .product(name: "InMemoryExporter",
+                                                              package: "opentelemetry-swift")],
                                       path: "Tests/ARCMetricsOTelTests")],
 
                       // MARK: - Swift Language
