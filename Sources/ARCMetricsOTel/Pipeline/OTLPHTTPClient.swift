@@ -37,12 +37,8 @@ final class OTLPHTTPClient: HTTPClient {
     func send(request: URLRequest, completion: @escaping (Result<HTTPURLResponse, any Error>) -> Void) {
         let outcome = BlockingResult<HTTPURLResponse>()
         let delivery = Self.startDelivery(request, with: session, into: outcome)
-        if let result = outcome.wait(until: Date(timeIntervalSinceNow: waitLimit(request))) {
-            completion(result)
-        } else {
-            delivery.cancel()
-            completion(.failure(URLError(.timedOut)))
-        }
+        let deadline = Date(timeIntervalSinceNow: waitLimit(request))
+        completion(outcome.wait(until: deadline) ?? Self.abandon(delivery))
     }
 
     func send(request: URLRequest) async throws -> HTTPURLResponse {
@@ -57,6 +53,12 @@ private extension OTLPHTTPClient {
 
     struct RetryableStatus: Error {
         let statusCode: Int
+    }
+
+    /// Cancels a delivery that missed its deadline and reports it as timed out.
+    static func abandon(_ delivery: Task<Void, Never>) -> Result<HTTPURLResponse, any Error> {
+        delivery.cancel()
+        return .failure(URLError(.timedOut))
     }
 
     /// Starts delivering `request` and resolves `outcome` when it finishes.
