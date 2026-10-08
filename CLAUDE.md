@@ -19,7 +19,13 @@ is approved as a dependency **in this package only**.
 Use the Xcode MCP (`BuildProject`, `RunAllTests`) — see the studio constitution. Xcode opens an
 SPM package by its **directory** path, not `Package.swift`.
 
-**Known toolchain warning (Xcode 27):** linking the test bundle for an iOS simulator emits
+**Coverage:** the Xcode MCP reports none, so `scripts/coverage.sh` runs `xcodebuild test
+-enableCodeCoverage` + `scripts/check-coverage.py` — the only sanctioned CLI path (user decision
+2026-10-08). Gate: 100% lines on `ARCMetricsOTel` and `ARCMetricsOTelMocks`, also enforced in CI
+(`.github/workflows/tests.yml`, iOS simulator — `swift test` on the macOS host cannot build an
+iOS-only package).
+
+**Known toolchain warning (Xcode 27), waived by the user 2026-10-08:** linking the test bundle for an iOS simulator emits
 `Using sysroot for 'macOS 27.0' but targeting 'arm64-apple-ios18.0.0-simulator'
 [-Wincompatible-sysroot]`. It reproduces in a fresh trivial package (same in ARCMetrics) and has
 no `Package.swift` lever. The library targets themselves are warning-free — check those.
@@ -30,7 +36,23 @@ make format    # SwiftFormat (dry run)
 make fix       # Apply SwiftFormat
 ```
 
+## Tooling traps
+
+- **`arcdevtools-setup` overwrites `.github/release-drafter.yml`** (and the PR template) on every
+  run. Its stock body advertises ARCDevTools; re-apply the ARCMetricsOTel installation snippet after
+  any setup run. `tests.yml` is project-owned (template header removed), so setup leaves it alone.
+- `.swiftformat` excludes `.claude/` — otherwise the pre-commit hook reformats the vendored
+  `arc-package-validator` script and setup reverts it on the next run.
+- `arc-package-validator` false positives: it requires `.iOS(.v17)` (we target 18), an MIT
+  license (we ship PolyForm) and a host `swift build` (cannot build iOS-only code).
+- The Write/Edit hook formats with Homebrew SwiftFormat/SwiftLint, which differ from the pins in
+  `.arc-tool-versions`. `make lint` / `make format` (pinned) are what CI runs.
+- Third-party dependency rationale and known upstream debt: `docs/adr/0001-opentelemetry-swift-dependency.md`.
+
 ## Git Workflow
 
 Gitflow: `main` (releases, tags) + `develop` (integration). Branches
-`feature/FVRS-XXX-description`; Conventional Commits. Release tags go on `main`.
+`feature/FVRS-XXX-description`; Conventional Commits; PR titles
+`[FEATURE|BUGFIX|HOTFIX|DOCS|CHORE][FVRS-XXX] Title` (CI hard gate). Releases go
+`develop` → `main` in a PR titled `[CHORE] Release: vX.Y.Z` — `enforce-gitflow.yml` rejects
+`release/*` → `main`. Tags are `vX.Y.Z`, on `main`.

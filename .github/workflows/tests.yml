@@ -1,8 +1,9 @@
-# ARCDevTools Workflow Template (Swift Package)
-# Source: https://github.com/arclabs-studio/ARCDevTools/workflows-spm/tests.yml
+# Project-owned (customised from ARCDevTools workflows-spm/tests.yml; template header removed
+# so arcdevtools-setup leaves it alone).
 #
-# This file was copied from ARCDevTools. You can customize it for your project.
-# To update: re-run ./ARCDevTools/arcdevtools-setup or manually copy from ARCDevTools/workflows-spm/
+# The package is iOS-only, so `swift test` on the macOS host cannot build it. Tests run with
+# xcodebuild on an iOS simulator, with a 100% line-coverage gate on the library targets.
+# The job names `Build (macOS)` / `Build (Linux)` are kept because branch protection requires them.
 name: Tests
 
 on:
@@ -10,6 +11,10 @@ on:
     branches: [main, develop, feature/*]
   pull_request:
     branches: [main, develop]
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check-platforms:
@@ -26,15 +31,14 @@ jobs:
         run: |
           if grep -qE "^[[:space:]]*platforms:[[:space:]]*\[" Package.swift; then
             echo "supports-linux=false" >> $GITHUB_OUTPUT
-            echo "📱 Package has platform constraints - Linux build will be skipped"
           else
             echo "supports-linux=true" >> $GITHUB_OUTPUT
-            echo "🐧 Package supports Linux"
           fi
 
   test-macos:
     name: Build (macOS)
-    runs-on: macos-15
+    runs-on: macos-26
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -42,11 +46,48 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Display Swift version
-        run: swift --version
+      - name: Select newest Xcode
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
 
-      - name: Run tests
-        run: swift test --parallel
+      - name: Cache SwiftPM packages
+        uses: actions/cache@v4
+        with:
+          path: .build/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Pick an iOS simulator
+        id: sim
+        run: |
+          UDID="$(xcrun simctl list devices available -j \
+            | jq -r '[.devices | to_entries[] | select(.key | test("iOS")) | .value[]
+                      | select(.name | startswith("iPhone"))] | last | .udid')"
+          test -n "$UDID" && test "$UDID" != "null"
+          echo "udid=$UDID" >> $GITHUB_OUTPUT
+
+      - name: Test with coverage
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme ARCMetricsOTel-Package \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -clonedSourcePackagesDirPath .build/SourcePackages \
+            -enableCodeCoverage YES \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Coverage gate (100%)
+        run: python3 scripts/check-coverage.py TestResults.xcresult 100 ARCMetricsOTel ARCMetricsOTelMocks
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TestResults
+          path: TestResults.xcresult
 
   test-linux:
     name: Build (Linux)
@@ -61,9 +102,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: Display Swift version
-        run: swift --version
 
       - name: Run tests
         run: swift test --parallel
