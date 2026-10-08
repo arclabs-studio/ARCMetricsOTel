@@ -36,14 +36,7 @@ final class OTLPHTTPClient: HTTPClient {
     /// so a stalled request never holds the buffer's worker or the telemetry thread for longer.
     func send(request: URLRequest, completion: @escaping (Result<HTTPURLResponse, any Error>) -> Void) {
         let outcome = BlockingResult<HTTPURLResponse>()
-        let session = session
-        let delivery = Task {
-            do {
-                try await outcome.resolve(.success(Self.deliver(request, with: session)))
-            } catch {
-                outcome.resolve(.failure(error))
-            }
-        }
+        let delivery = Self.startDelivery(request, with: session, into: outcome)
         if let result = outcome.wait(until: Date(timeIntervalSinceNow: waitLimit(request))) {
             completion(result)
         } else {
@@ -64,6 +57,22 @@ private extension OTLPHTTPClient {
 
     struct RetryableStatus: Error {
         let statusCode: Int
+    }
+
+    /// Starts delivering `request` and resolves `outcome` when it finishes.
+    ///
+    /// A separate function whose parameters are all `Sendable`: Xcode 26's region-based isolation
+    /// checker rejects the task when it is created next to the non-`Sendable` completion.
+    static func startDelivery(_ request: URLRequest,
+                              with session: URLSession,
+                              into outcome: BlockingResult<HTTPURLResponse>) -> Task<Void, Never> {
+        Task {
+            do {
+                try await outcome.resolve(.success(deliver(request, with: session)))
+            } catch {
+                outcome.resolve(.failure(error))
+            }
+        }
     }
 
     static func deliver(_ request: URLRequest, with session: URLSession) async throws -> HTTPURLResponse {
