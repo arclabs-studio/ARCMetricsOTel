@@ -1,0 +1,59 @@
+# ARCDevTools SwiftFormat Configuration
+# Version: 1.1.0
+
+# Indentation
+--indent 4
+--tabwidth 4
+--xcodeindentation enabled
+
+# Line width
+--maxwidth 120
+
+# Brace style
+--allman false
+--wraparguments after-first
+--wrapparameters after-first
+--wrapcollections after-first
+--closingparen same-line
+--disable wrapMultilineStatementBraces
+
+# Imports
+--importgrouping testable-bottom
+--stripunusedargs always
+
+# Spacing
+--trimwhitespace always
+--commas never
+--semicolons inline
+--ifdef no-indent
+--linebreaks lf
+
+# Self
+--self remove
+
+# Wrapping
+--wrapternary before-operators
+
+# Attributes - Type attributes on previous line (ARC Labs style)
+--type-attributes prev-line
+--func-attributes same-line
+--stored-var-attributes same-line
+--computed-var-attributes same-line
+--complex-attributes same-line
+
+# Organization
+--organizetypes actor,class,enum,struct
+--structthreshold 0
+--class-threshold 0
+--enumthreshold 0
+
+# Swift 6 specific
+--marktypes always
+--extensionacl on-extension
+
+# Exclude
+# ARCDevTools / Tools/ARCDevTools are the submodule itself — `make fix` runs
+# swiftformat over `.`, so without these it reformats the tooling repo's own
+# sources and leaves the submodule dirty. .arc-tools holds downloaded binaries.
+# Mirrors the `excluded:` list in swiftlint.base.yml.
+--exclude .build,DerivedData,Pods,Carthage,Generated,ARCDevTools,Tools/ARCDevTools,.arc-tools

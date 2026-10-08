@@ -1,0 +1,27 @@
+# Project SwiftLint Configuration
+#
+# Studio-wide rules live in `.swiftlint.base.yml` (refreshed automatically by
+# `arcdevtools-setup`). This file owns project shape — primarily the
+# `included:` paths and any project-local rule tweaks.
+#
+# To restore studio defaults: delete this file and re-run
+#   ./ARCDevTools/arcdevtools-setup
+# A fresh starter will be regenerated.
+
+parent_config: .swiftlint.base.yml
+
+# Adjust these paths to match your project layout.
+# Swift Package layout:
+#   - Sources
+#   - Tests
+# iOS App layout (example):
+#   - MyApp/MyApp
+#   - MyApp/MyAppTests
+included:
+  - Sources
+  - Tests
+
+# Add project-local rule tweaks below (overrides .swiftlint.base.yml).
+# Example:
+#   line_length:
+#     warning: 140

@@ -1,0 +1,147 @@
+# ARCDevTools Workflow Template
+# Source: https://github.com/arclabs-studio/ARCDevTools/workflows-spm/enforce-gitflow.yml
+#
+# This file was copied from ARCDevTools. You can customize it for your project.
+# To update: re-run ./ARCDevTools/arcdevtools-setup or manually copy from ARCDevTools/workflows-spm/
+name: Enforce Git Flow
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+      - develop
+
+jobs:
+  validate-branch-rules:
+    name: Validate Branch Rules
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate branch targeting
+        run: |
+          TARGET="${{ github.base_ref }}"
+          SOURCE="${{ github.head_ref }}"
+
+          echo "🌿 Validating branch rules..."
+          echo "Source branch: $SOURCE"
+          echo "Target branch: $TARGET"
+          echo ""
+
+          # Rule 1: feature/* branches must target develop
+          if [[ $SOURCE == feature/* ]] && [[ $TARGET != "develop" ]]; then
+            echo "❌ ERROR: Feature branches must target 'develop'"
+            echo "   Branch: $SOURCE"
+            echo "   Target: $TARGET"
+            echo ""
+            echo "ℹ️  Change the base branch of this PR to 'develop'"
+            exit 1
+          fi
+
+          # Rule 2: hotfix/* branches must target main
+          if [[ $SOURCE == hotfix/* ]] && [[ $TARGET != "main" ]]; then
+            echo "❌ ERROR: Hotfix branches must target 'main'"
+            echo "   Branch: $SOURCE"
+            echo "   Target: $TARGET"
+            echo ""
+            echo "ℹ️  Change the base branch of this PR to 'main'"
+            exit 1
+          fi
+
+          # Rule 3: Only develop or hotfix/* can target main
+          if [[ $TARGET == "main" ]]; then
+            if [[ $SOURCE != "develop" ]] && [[ $SOURCE != hotfix/* ]]; then
+              echo "❌ ERROR: Only 'develop' or 'hotfix/*' branches can target 'main'"
+              echo "   Branch: $SOURCE"
+              echo ""
+              echo "ℹ️  Merge your changes to 'develop' first, then create a release PR"
+              exit 1
+            fi
+          fi
+
+          echo "✅ Branch targeting is correct"
+
+      - name: Validate branch naming
+        run: |
+          SOURCE="${{ github.head_ref }}"
+
+          echo "🏷️ Validating branch naming convention..."
+
+          # Check if branch follows naming convention
+          if [[ $SOURCE =~ ^(feature|hotfix|bugfix|release)/.+ ]]; then
+            echo "✅ Branch name follows convention: $SOURCE"
+          elif [[ $SOURCE == "develop" ]] || [[ $SOURCE == "main" ]]; then
+            echo "✅ Main branch: $SOURCE"
+          else
+            echo "⚠️  WARNING: Branch name doesn't follow convention"
+            echo "   Branch: $SOURCE"
+            echo "   Expected: feature/*, hotfix/*, bugfix/*, release/*"
+            echo ""
+            echo "ℹ️  This is a warning only - PR can still be merged"
+          fi
+
+      - name: Check conventional commits
+        continue-on-error: true
+        run: |
+          echo "💬 Checking commit messages..."
+
+          # Get commits in this PR
+          git log --format=%s ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} > /tmp/commits.txt
+
+          NON_CONVENTIONAL=0
+
+          while IFS= read -r commit; do
+            # Check if commit follows conventional commits format
+            if [[ ! $commit =~ ^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?!?:\ .+ ]]; then
+              echo "⚠️  Non-conventional commit: $commit"
+              ((NON_CONVENTIONAL++))
+            fi
+          done < /tmp/commits.txt
+
+          if [ $NON_CONVENTIONAL -gt 0 ]; then
+            echo ""
+            echo "⚠️  Found $NON_CONVENTIONAL commit(s) not following Conventional Commits"
+            echo ""
+            echo "ℹ️  Conventional Commits format:"
+            echo "   <type>(<scope>): <subject>"
+            echo ""
+            echo "   Types: feat, fix, docs, style, refactor, perf, test, chore, ci, build, revert"
+            echo ""
+            echo "   Examples:"
+            echo "   - feat: add new configuration option"
+            echo "   - fix: resolve issue with setup script"
+            echo "   - docs: update installation instructions"
+            echo ""
+            echo "ℹ️  This is a warning only - PR can still be merged"
+          else
+            echo "✅ All commits follow Conventional Commits format"
+          fi
+
+      - name: Generate validation summary
+        if: always()
+        run: |
+          echo "## 🌿 Git Flow Validation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Source:** \`${{ github.head_ref }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Target:** \`${{ github.base_ref }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Branch targeting rules validated" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Branch naming convention checked" >> $GITHUB_STEP_SUMMARY
+          echo "- ⚠️  Commit message format checked (warnings only)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Git Flow Rules" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. \`feature/*\` → \`develop\` only" >> $GITHUB_STEP_SUMMARY
+          echo "2. \`hotfix/*\` → \`main\` only" >> $GITHUB_STEP_SUMMARY
+          echo "3. \`develop\` or \`hotfix/*\` → \`main\` only" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "See [CONTRIBUTING.md](../CONTRIBUTING.md) for complete guidelines." >> $GITHUB_STEP_SUMMARY
