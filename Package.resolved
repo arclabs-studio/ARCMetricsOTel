@@ -1,6 +1,24 @@
 {
-  "originHash" : "f7e323f3006825a9785abb48f19e41fd8ce2d37d192ed618059ea05b1a9d21cc",
+  "originHash" : "a3b6b0aa36a21c6828437107d9daac8c88424a4ecbb5d1ba97335c658c74d8f9",
   "pins" : [
+    {
+      "identity" : "arclogger",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/arclabs-studio/ARCLogger.git",
+      "state" : {
+        "revision" : "7b56390c44a437fc3861e5f7d5a69f114ade08e9",
+        "version" : "1.0.0"
+      }
+    },
+    {
+      "identity" : "arcmetrics",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/arclabs-studio/ARCMetrics.git",
+      "state" : {
+        "revision" : "a099c065aa1a6626d53da9cf39b36cfe6f93c725",
+        "version" : "2.1.0"
+      }
+    },
     {
       "identity" : "grpc-swift",
       "kind" : "remoteSourceControl",
