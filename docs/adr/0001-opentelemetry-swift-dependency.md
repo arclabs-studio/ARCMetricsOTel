@@ -38,7 +38,9 @@ Accepted as upstream debt, not repeated in our code:
   cooperative pool this deadlocks once concurrent flushes occupy every pool thread (observed
   2026-10-08: 10/10 threads parked in `BatchSpanProcessor.forceFlush`). `OTelTelemetry`
   therefore runs on its own serial executor backed by a dedicated `Thread`
-  (`TelemetryExecutor`, SE-0392), so no upstream call ever runs on the pool. We still keep
+  (`TelemetryExecutor`, SE-0392), so no upstream call ever runs on the pool. The thread runs at
+  `.default` QoS: at `.utility`, tests waiting on it stalled on three-core CI runners (suspected
+  starvation). We still keep
   flushes rare (explicit `flush()`, app backgrounding).
 - **Flush ignores `exportCondition`.** `DataExportWorker.flush()` bypasses the export condition,
   so the kill switch adds its own gated exporter inside the persistence decorator.
