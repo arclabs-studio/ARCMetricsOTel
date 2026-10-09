@@ -204,8 +204,8 @@ import Testing
     // MARK: Concurrency
 
     @Test("1,000 concurrent begin/end pairs export exactly 1,000 distinct spans") func concurrentSpans() async throws {
-        // Given a pipeline whose disk buffer fits a full 512-span batch (the shared harness preset caps an
-        // object at 64 kB, which a batch that size exceeds). 1,000 pairs are 2,000 commands, well under
+        // Given a pipeline whose disk buffer fits a full batch (the shared harness preset caps an object
+        // at 64 kB, which a full batch may exceed). 1,000 pairs are 2,000 commands, well under
         // the ingress queue's 10,000 capacity: if either number changes, a full queue drops spans silently
         // and this fails as "missing spans", not as an overflow.
         let spans = RecordingSpanExporter()
