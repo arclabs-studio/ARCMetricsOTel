@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `View.trackScreen(_:attributes:)` records `app.screen.view` with `app.screen.name` through the
   `TelemetryEmitting` set with `View.telemetry(_:)`; `RecordingTelemetryEmitter` in
   `ARCMetricsOTelMocks` records events for tests and previews.
+- `Examples/ARCMetricsOTelDemoApp`: an iPhone demo that drives every feature against a collector
+  set with `OTEL_EXPORTER_OTLP_ENDPOINT`.
 - DocC catalog: Getting Started, Kill Switch and Sampling, Sessions, Offline Buffering, Privacy,
   MetricKit Bridge and Local Grafana.
 
