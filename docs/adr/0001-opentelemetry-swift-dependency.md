@@ -44,6 +44,12 @@ Accepted as upstream debt, not repeated in our code:
   flushes rare (explicit `flush()`, app backgrounding).
 - **Flush ignores `exportCondition`.** `DataExportWorker.flush()` bypasses the export condition,
   so the kill switch adds its own gated exporter inside the persistence decorator.
+- **Oversized batches vanish.** The persistence decorator JSON-encodes each batch it receives as
+  one object, and the file orchestrator refuses (silently) any object above `maxObjectSize`. With
+  the batch processors' default of 512 records, a backlog flushed at once never reached the
+  exporter (observed 2026-10-09: 0 of 1,000 spans and 0 of 1,000 log records). We cap
+  `maxExportBatchSize` at 100 for spans and logs and allow objects up to 1 MB. The cap counts
+  records, not bytes, so a batch of records with very large attributes can still be dropped.
 - **Unsafe defaults we override.** `requeueOnFailure` defaults to `true` (double delivery with the
   disk buffer) — always `false`. `envVarHeaders` reads the process environment — always `nil`.
 - **Protobuf only.** The OTLP/HTTP exporters always send `application/x-protobuf` and ignore

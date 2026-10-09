@@ -29,3 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Depends on ARCMetrics `2.1.0` or later, for the `Tracing` protocol.
+
+### Fixed
+
+- A backlog of more than a few hundred spans or log records flushed at once was silently dropped
+  by the disk buffer. Batches are now capped at 100 records and buffered objects at 1 MB.

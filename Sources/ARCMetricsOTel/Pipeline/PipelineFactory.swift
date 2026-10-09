@@ -14,6 +14,14 @@ enum PipelineFactory {
     /// The instrumentation scope name on every span and log record.
     static let scopeName = "ARCMetricsOTel"
 
+    /// The most records one batch hands the disk buffer.
+    ///
+    /// The buffer stores each batch as a single object and drops, silently, any object above the
+    /// preset's `maxObjectSize`. With upstream's default of 512, whole batches vanished that way;
+    /// `LargeBatchTests` pushes a 1,000-record backlog through the production limits. The cap
+    /// counts records, not bytes: 100 records with very large attributes can still exceed the limit.
+    static let maxExportBatchSize = 100
+
     /// Prepares `storage` and builds the pipeline.
     ///
     /// - Throws: ``OTelBootstrapError/storageUnavailable`` when the buffer directories cannot be created.
@@ -47,10 +55,12 @@ enum PipelineFactory {
                                                         performancePreset: dependencies.performancePreset)
         let spanProcessor = BatchSpanProcessor(spanExporter: spanBuffer,
                                                scheduleDelay: dependencies.scheduleDelay,
-                                               exportTimeout: timeout)
+                                               exportTimeout: timeout,
+                                               maxExportBatchSize: maxExportBatchSize)
         let logProcessor = BatchLogRecordProcessor(logRecordExporter: logBuffer,
                                                    scheduleDelay: dependencies.scheduleDelay,
-                                                   exportTimeout: timeout)
+                                                   exportTimeout: timeout,
+                                                   maxExportBatchSize: maxExportBatchSize)
         let tracerProvider = TracerProviderBuilder()
             .with(resource: resource)
             .with(sampler: SessionSampler(gate: gate))
