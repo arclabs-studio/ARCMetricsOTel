@@ -68,14 +68,32 @@ jobs:
           test -n "$UDID" && test "$UDID" != "null"
           echo "udid=$UDID" >> $GITHUB_OUTPUT
 
-      # TEMPORARY (FVRS-348): some runs stall for minutes. Record host memory, swap and the
-      # heaviest processes every 15 s while xcodebuild runs, to test the memory-pressure theory.
-      # Remove once the cause is fixed.
+      # Build and boot first, so the tests do not start while compilation and the simulator's
+      # first-boot work are saturating the runner (load averages of 200-600 were measured there).
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -scheme ARCMetricsOTel-Package \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -clonedSourcePackagesDirPath .build/SourcePackages \
+            -derivedDataPath .build/DerivedData \
+            -enableCodeCoverage YES \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Boot the simulator
+        run: |
+          xcrun simctl boot "${{ steps.sim.outputs.udid }}" || true
+          xcrun simctl bootstatus "${{ steps.sim.outputs.udid }}" -b
+          sysctl -n vm.loadavg
+
+      # TEMPORARY (FVRS-348): record load, memory and the heaviest processes while the tests
+      # run, to confirm the runner is no longer saturated. Remove once confirmed.
       - name: Start runner monitor
         run: |
           mkdir -p stall-samples
           nohup bash -c '
-            sleep 20
+            sleep 5
             while pgrep -x xcodebuild >/dev/null; do
               {
                 echo "=== $(date -u +%H:%M:%S)"
@@ -95,10 +113,12 @@ jobs:
       - name: Test with coverage
         run: |
           set -o pipefail
-          xcodebuild test \
+          echo "load before tests: $(sysctl -n vm.loadavg)"
+          xcodebuild test-without-building \
             -scheme ARCMetricsOTel-Package \
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -clonedSourcePackagesDirPath .build/SourcePackages \
+            -derivedDataPath .build/DerivedData \
             -enableCodeCoverage YES \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO
