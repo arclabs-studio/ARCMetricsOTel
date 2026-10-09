@@ -134,7 +134,7 @@ public actor OTelTelemetry {
     nonisolated func startSpan(id: UInt64,
                                name: String,
                                parentID: UInt64?,
-                               attributes: [String: AttributeValue]) {
+                               attributes: TraceAttributes) {
         guard gate.isEnabled else { return }
         ingress.send(.startSpan(SpanStart(id: id,
                                           name: name,
@@ -144,7 +144,7 @@ public actor OTelTelemetry {
     }
 
     /// Enqueues the end of a span. `errorType` marks it failed.
-    nonisolated func endSpan(id: UInt64, errorType: String?, attributes: [String: AttributeValue]) {
+    nonisolated func endSpan(id: UInt64, errorType: String?, attributes: TraceAttributes) {
         guard gate.isEnabled else { return }
         ingress.send(.endSpan(SpanEnd(id: id, errorType: errorType, attributes: attributes, time: clock.now)))
     }
@@ -153,7 +153,7 @@ public actor OTelTelemetry {
     ///
     /// The record joins the session current now, even when `timestamp` is in the past.
     nonisolated func emitEvent(name: String,
-                               attributes: [String: AttributeValue],
+                               attributes: TraceAttributes,
                                severity: Severity,
                                timestamp: Date? = nil) {
         guard gate.isEnabled else { return }
@@ -168,7 +168,7 @@ public actor OTelTelemetry {
     /// Enqueues a span that ran from `start` to `end`, with no parent.
     ///
     /// The span joins the session current now, even when it ran in the past.
-    nonisolated func recordSpan(name: String, attributes: [String: AttributeValue], start: Date, end: Date) {
+    nonisolated func recordSpan(name: String, attributes: TraceAttributes, start: Date, end: Date) {
         guard gate.isEnabled else { return }
         ingress.send(.completedSpan(CompletedSpan(name: name,
                                                   attributes: attributes,
@@ -197,8 +197,7 @@ public extension OTelTelemetry {
                                attributes: TraceAttributes = [:],
                                severity: EventSeverity = .info,
                                timestamp: Date? = nil) {
-        emitEvent(name: name, attributes: attributes.otelAttributes, severity: severity.otelSeverity,
-                  timestamp: timestamp)
+        emitEvent(name: name, attributes: attributes, severity: severity.otelSeverity, timestamp: timestamp)
     }
 }
 
@@ -287,7 +286,7 @@ private extension OTelTelemetry {
         } else {
             builder.setNoParent()
         }
-        for (key, value) in stamped(start.attributes, with: session) {
+        for (key, value) in recorded(start.attributes, session: session) {
             builder.setAttribute(key: key, value: value)
         }
         openSpans[start.id] = builder.startSpan()
@@ -298,7 +297,11 @@ private extension OTelTelemetry {
         guard let span = openSpans.removeValue(forKey: end.id) else {
             return
         }
-        span.setAttributes(end.attributes)
+        // The session was stamped at start; never let end attributes replace it.
+        var attributes = scrubbed(end.attributes)
+        attributes[AttributeKeys.sessionID] = nil
+        attributes[AttributeKeys.sessionPreviousID] = nil
+        span.setAttributes(attributes)
         if let errorType = end.errorType {
             span.status = .error(description: errorType)
             span.setAttribute(key: AttributeKeys.errorType, value: .string(errorType))
@@ -311,7 +314,7 @@ private extension OTelTelemetry {
         let builder = pipeline.tracer.spanBuilder(spanName: completed.name)
             .setStartTime(time: completed.start)
             .setNoParent()
-        for (key, value) in stamped(completed.attributes, with: session) {
+        for (key, value) in recorded(completed.attributes, session: session) {
             builder.setAttribute(key: key, value: value)
         }
         builder.startSpan().end(time: completed.end)
@@ -347,17 +350,24 @@ private extension OTelTelemetry {
             .setEventName(record.name)
             .setTimestamp(record.time)
             .setSeverity(record.severity)
-            .setAttributes(stamped(record.attributes, with: session))
+            .setAttributes(recorded(record.attributes, session: session))
             .emit()
     }
 
-    func stamped(_ attributes: [String: AttributeValue], with session: Session) -> [String: AttributeValue] {
-        var stamped = attributes
-        stamped[AttributeKeys.sessionID] = .string(session.id)
+    /// `attributes` after the configured scrubber, as OpenTelemetry values.
+    func scrubbed(_ attributes: TraceAttributes) -> [String: AttributeValue] {
+        configuration.attributeScrubber.scrub(attributes).otelAttributes
+    }
+
+    /// A record's attributes: scrubbed, then stamped with `session`. Stamping comes last, so a
+    /// scrubber can neither remove nor forge `session.id` and `session.previous_id`.
+    func recorded(_ attributes: TraceAttributes, session: Session) -> [String: AttributeValue] {
+        var recorded = scrubbed(attributes)
+        recorded[AttributeKeys.sessionID] = .string(session.id)
         if let previousID = session.previousID {
-            stamped[AttributeKeys.sessionPreviousID] = .string(previousID)
+            recorded[AttributeKeys.sessionPreviousID] = .string(previousID)
         }
-        return stamped
+        return recorded
     }
 }
 

@@ -11,6 +11,8 @@ import Testing
                                           // M3: crash and hang diagnostics, lifecycle state
                                           "exception.type", "exception.signal", "exception.termination_reason",
                                           "app.hang.duration_s", "ios.app.state",
+                                          // M4a: screen views
+                                          "app.screen.name",
                                           // M3: the MXMetricPayload span
                                           "metrickit.memory.peak_memory_usage",
                                           "metrickit.memory.suspended_memory_average",
@@ -58,6 +60,8 @@ import Testing
         lifecycle.send(.foreground)
         lifecycle.finish()
         await observer.run()
+        // M4a producer: a screen view
+        ScreenViewTracker(emitter: sut.telemetry).screenAppeared("Home", attributes: [:])
         await sut.telemetry.flush()
 
         let exportedSpans = spans.exportedSpans

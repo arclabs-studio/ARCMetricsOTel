@@ -40,11 +40,13 @@ let package = Package(name: "ARCMetricsOTel",
                                                           package: "opentelemetry-swift"),
                                                  .product(name: "PersistenceExporter",
                                                           package: "opentelemetry-swift")],
-                                  path: "Sources/ARCMetricsOTel"),
+                                  path: "Sources/ARCMetricsOTel",
+                                  resources: [.copy("PrivacyInfo.xcprivacy")]),
 
                           // Test doubles for consumers of ARCMetricsOTel
                           .target(name: "ARCMetricsOTelMocks",
-                                  dependencies: ["ARCMetricsOTel"],
+                                  dependencies: ["ARCMetricsOTel",
+                                                 .product(name: "ARCMetrics", package: "ARCMetrics")],
                                   path: "Sources/ARCMetricsOTelMocks"),
 
                           // Tests

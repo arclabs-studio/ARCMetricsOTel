@@ -12,7 +12,22 @@ is approved as a dependency **in this package only**.
 **Swift:** 6.0 tools, Swift 6 language mode
 **Products:** `ARCMetricsOTel`, `ARCMetricsOTelMocks` (test doubles)
 
-**Status:** scaffold. Work is tracked in FVRS-348 and ships as milestone PRs M1–M4 to `develop`.
+**Status:** pre-1.0. Work is tracked in FVRS-348 and ships as milestone PRs M1–M4 to `develop`.
+
+## Design decisions to keep
+
+- **One lock: `Mutex`.** `TelemetryGate` (and a few small `Sendable` final classes) guard state with
+  `Synchronization.Mutex`, because upstream calls the sampler, `exportCondition` and the exporters
+  synchronously from its own threads. That is legitimate `Sendable`, not an escape: never replace it
+  with `@unchecked Sendable` or `nonisolated(unsafe)`.
+- **Own sessions.** `SessionTracker` is ours, not upstream's Sessions instrumentation (no clock seam,
+  static `UserDefaults`, a global logger, `nonisolated(unsafe)` statics).
+- **Session time vs record time.** A record about the past (MetricKit, `emitEvent(timestamp:)`)
+  keeps its timestamp but joins the session current when it is recorded — never `touch` the
+  tracker with a past time.
+- **Scrub before stamping.** `AttributeScrubber` runs in the actor before `session.id` is added.
+- **Public API stays free of OpenTelemetry types** (`TraceAttributes`, `EventSeverity`), so apps
+  never import an OpenTelemetry module.
 
 ## Build & Test
 

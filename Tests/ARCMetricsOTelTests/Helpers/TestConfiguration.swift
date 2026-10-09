@@ -11,7 +11,8 @@ enum TestConfiguration {
     static func make(endpoint: String = "https://otlp.example.test",
                      headers: [String: String] = [:],
                      settings: TelemetrySettings = .disabled,
-                     allowsInsecureTransport: Bool = false) throws -> OTelConfiguration {
+                     allowsInsecureTransport: Bool = false,
+                     attributeScrubber: AttributeScrubber = .default) throws -> OTelConfiguration {
         let url = try #require(URL(string: endpoint))
         return OTelConfiguration(serviceName: serviceName,
                                  serviceVersion: serviceVersion,
@@ -19,6 +20,7 @@ enum TestConfiguration {
                                  endpoint: url,
                                  headers: headers,
                                  initialSettings: settings,
-                                 allowsInsecureTransport: allowsInsecureTransport)
+                                 allowsInsecureTransport: allowsInsecureTransport,
+                                 attributeScrubber: attributeScrubber)
     }
 }

@@ -30,8 +30,9 @@ stays dependency-free.
 - ✅ **MetricKit bridge** — ARCMetrics summaries become `MXMetricPayload` spans, `app.crash` and
   `app.hang` events
 - ✅ **App lifecycle** — `device.app.lifecycle` events, and a flush when the app goes to the background
-- 🔜 A SwiftUI `.trackScreen(_:)` modifier
-- 🔜 **Privacy** — attribute and URL scrubbing (no PII attributes are emitted by default today)
+- ✅ **Screen views** — a SwiftUI `.trackScreen(_:)` modifier
+- ✅ **Privacy** — an `AttributeScrubber` (OpenTelemetry and Apple data types) runs on every record,
+  and the package ships its own privacy manifest
 
 ### Tracing with ARCMetrics
 
@@ -77,17 +78,30 @@ collector.startCollecting()
 - `exception.termination_reason` is exported only in its structured form
   (`Namespace SIGNAL, Code 11`); free text the OS appends, such as a library path, is left out.
 
-### Privacy: what links sessions together
+### Privacy
 
-`session.previous_id` is persisted across launches (in `UserDefaults`; it is a random id, not a
-secret), so a collector can chain every session of an install from its first launch onwards.
-Together with `device.model.identifier`, `os.version` and the client IP, that works as a
-pseudonymous install identifier. Apps using this package must declare it in their privacy
-manifest and App Store privacy label.
+Every record's attributes pass through an `AttributeScrubber` before they are created. The default
+follows OpenTelemetry's semantic conventions and Apple's App Privacy data types: it drops
+personal-data keys (`user.email`, `userEmail`, `geo.location.lat`, `auth_token`, …) and redacts
+credentials, queries and fragments in `url.*` values. It is a best-effort backstop: never put
+personal data in attributes or names, and add your own rules with `AttributeScrubber.then(_:)`.
 
-With the MetricKit bridge running, the app also sends crash data (`app.crash`) and performance
-data (`MXMetricPayload`, `app.hang`): declare **Diagnostics — Crash Data** and **Diagnostics —
-Performance Data** as well.
+The package ships a `PrivacyInfo.xcprivacy` (UserDefaults `CA92.1`; crash, performance and other
+diagnostic data, product interaction and a device ID, none linked or used for tracking). Your App
+Store privacy label must cover the same data:
+
+| Data the app sends | App Privacy data type |
+|--------------------|-----------------------|
+| `app.crash` | Diagnostics — Crash Data |
+| `MXMetricPayload`, `app.hang` | Diagnostics — Performance Data |
+| Your spans, `session.start` / `session.end` | Diagnostics — Other Diagnostic Data |
+| `app.screen.view`, `device.app.lifecycle` | Usage Data — Product Interaction |
+| `session.id`, `session.previous_id` | Identifiers — Device ID |
+
+`session.previous_id` is persisted across launches, so a collector can chain every session of an
+install; with `device.model.identifier`, `os.version` and the client IP it is a pseudonymous install
+identifier. Declare the data as **linked to you** as soon as your attributes or your collector join
+it to an account or other personal data. Details: the *Privacy* article in the DocC catalog.
 
 ---
 
@@ -147,8 +161,19 @@ scripts/coverage.sh            # xcodebuild test + coverage gate
 ## 📦 Dependencies & Known Debt
 
 ARC packages avoid third-party code; this package is the approved exception. It depends on
-opentelemetry-swift 2.6.x. The trade-offs — a ~27-package resolve, upstream concurrency escapes,
-a blocking flush — are recorded in [ADR 0001](docs/adr/0001-opentelemetry-swift-dependency.md).
+opentelemetry-swift 2.6.x (core and contrib). Known upstream debt, accepted and worked around
+here — details in [ADR 0001](docs/adr/0001-opentelemetry-swift-dependency.md):
+
+- **Resolve size:** contrib resolves ~27 packages (gRPC, NIO, protobuf, …), although only the
+  OTLP/HTTP exporter and the persistence decorator are linked.
+- **Concurrency escapes:** upstream uses `@unchecked Sendable`, `nonisolated(unsafe)` and GCD. This
+  package adds none; its one lock is a `Mutex`.
+- **Blocking flush:** upstream's export and flush block the calling thread. `OTelTelemetry` runs on
+  its own thread, so a flush never occupies Swift's cooperative pool.
+- **Flush ignores the export condition:** the disk buffer's flush bypasses `exportCondition`, so the
+  kill switch also gates the exporter inside the buffer.
+- **Oversized batches vanish:** the buffer silently drops a stored batch above its object limit;
+  batches are capped at 100 records and objects at 1 MB.
 
 ---
 
