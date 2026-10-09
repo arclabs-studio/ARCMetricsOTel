@@ -2,7 +2,8 @@ import Foundation
 import Testing
 @testable import ARCMetricsOTel
 
-@Suite("Concurrent flush", .tags(.integration, .critical), .timeLimit(.minutes(1))) struct ConcurrentFlushTests {
+@Suite("Concurrent flush", .tags(.integration, .critical), .serialized,
+       .timeLimit(.minutes(1))) struct ConcurrentFlushTests {
     @Test("More simultaneous flushes than CPUs all complete and deliver their spans")
     func manyConcurrentFlushesDoNotDeadlock() async throws {
         let count = ProcessInfo.processInfo.activeProcessorCount * 2 + 2

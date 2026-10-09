@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import ARCMetricsOTel
 
-@Suite("Session events", .tags(.integration), .timeLimit(.minutes(1))) struct SessionEventsTests {
+@Suite("Session events", .tags(.integration), .serialized, .timeLimit(.minutes(1))) struct SessionEventsTests {
     private struct Harness {
         let sut: IntegrationSUT
         let logs: RecordingLogExporter

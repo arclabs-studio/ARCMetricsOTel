@@ -141,10 +141,7 @@ import Testing
             await subject.captureThread(into: probe)
         }
 
-        let deadline = ContinuousClock.now.advanced(by: .seconds(30))
-        while !probe.isFinished, ContinuousClock.now < deadline {
-            await Task.yield()
-        }
+        _ = await eventually { probe.isFinished }
 
         #expect(probe.name == "exits-after-release")
         #expect(probe.isFinished)

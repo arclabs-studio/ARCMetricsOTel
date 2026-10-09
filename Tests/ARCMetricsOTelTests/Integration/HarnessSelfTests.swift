@@ -7,7 +7,7 @@ import Testing
 
 /// Proves the test harness itself (stub transport, request-body decoding, routing) with the real
 /// upstream OTLP exporters, so a later failure in an acceptance test cannot be the harness's fault.
-@Suite("Test harness", .tags(.integration), .timeLimit(.minutes(1))) struct HarnessSelfTests {
+@Suite("Test harness", .tags(.integration), .serialized, .timeLimit(.minutes(1))) struct HarnessSelfTests {
     private let endpoint = URL(string: "https://otlp.example.test")
 
     private func makeExporters(testID: String, behavior: StubServer.Behavior) throws

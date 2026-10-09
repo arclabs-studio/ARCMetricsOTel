@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import ARCMetricsOTel
 
-@Suite("Shutdown", .tags(.integration), .timeLimit(.minutes(1))) struct ShutdownTests {
+@Suite("Shutdown", .tags(.integration), .serialized, .timeLimit(.minutes(1))) struct ShutdownTests {
     private struct Harness {
         let sut: IntegrationSUT
         let spans: RecordingSpanExporter

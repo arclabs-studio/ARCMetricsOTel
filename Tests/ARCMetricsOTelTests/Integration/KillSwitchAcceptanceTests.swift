@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import ARCMetricsOTel
 
-@Suite("Acceptance: kill switch", .tags(.integration, .critical), .timeLimit(.minutes(1)))
+@Suite("Acceptance: kill switch", .tags(.integration, .critical), .serialized, .timeLimit(.minutes(1)))
 struct KillSwitchAcceptanceTests {
     private let enabled = TelemetrySettings(isEnabled: true, sampleRate: 1)
 

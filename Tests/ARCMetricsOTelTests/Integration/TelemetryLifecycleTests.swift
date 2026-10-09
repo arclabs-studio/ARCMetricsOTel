@@ -4,7 +4,8 @@ import PersistenceExporter
 import Testing
 @testable import ARCMetricsOTel
 
-@Suite("Telemetry lifecycle", .tags(.integration), .timeLimit(.minutes(1))) struct TelemetryLifecycleTests {
+@Suite("Telemetry lifecycle", .tags(.integration), .serialized,
+       .timeLimit(.minutes(1))) struct TelemetryLifecycleTests {
     private struct Harness {
         let sut: IntegrationSUT
         let spans: RecordingSpanExporter
@@ -96,14 +97,9 @@ import Testing
         let ingress = try #require(telemetry?.ingress)
         telemetry = nil
 
-        var accepted = true
-        let deadline = ContinuousClock.now.advanced(by: .seconds(30))
-        while accepted, ContinuousClock.now < deadline {
-            accepted = ingress.send(.resetSession(Date()))
-            await Task.yield()
-        }
+        let closed = await eventually { !ingress.send(.resetSession(Date())) }
 
-        #expect(!accepted)
+        #expect(closed)
     }
 
     @Test("Without a storage root the buffer lives in Application Support") func defaultStorageRoot() async throws {
@@ -188,10 +184,7 @@ import Testing
 
         telemetry.startSpan(id: 1, name: "automatic", parentID: nil, attributes: [:])
         telemetry.endSpan(id: 1, errorType: nil, attributes: [:])
-        let deadline = ContinuousClock.now.advanced(by: .seconds(30))
-        while spans.exportedSpans.isEmpty, ContinuousClock.now < deadline {
-            await Task.yield()
-        }
+        _ = await eventually { !spans.exportedSpans.isEmpty }
 
         #expect(spans.exportedSpans.map(\.name) == ["automatic"])
     }

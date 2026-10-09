@@ -3,7 +3,8 @@ import OpenTelemetrySdk
 import Testing
 @testable import ARCMetricsOTel
 
-@Suite("AttributeKeys", .tags(.integration, .critical), .timeLimit(.minutes(1))) struct AttributeKeysTests {
+@Suite("AttributeKeys", .tags(.integration, .critical), .serialized,
+       .timeLimit(.minutes(1))) struct AttributeKeysTests {
     /// Every key the package itself puts on spans, log events and session events.
     private static let recordKeys: Set = ["session.id", "session.previous_id", "error.type"]
 

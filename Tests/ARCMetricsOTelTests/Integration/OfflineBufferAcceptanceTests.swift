@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import ARCMetricsOTel
 
-@Suite("Acceptance: offline disk buffer", .tags(.integration, .critical), .timeLimit(.minutes(1)))
+@Suite("Acceptance: offline disk buffer", .tags(.integration, .critical), .serialized, .timeLimit(.minutes(1)))
 struct OfflineBufferAcceptanceTests {
     @Test("A span recorded offline is buffered on disk, then delivered exactly once when the network returns")
     func bufferedThenDeliveredOnce() async throws {

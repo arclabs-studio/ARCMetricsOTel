@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import ARCMetricsOTel
 
-@Suite("Bootstrap failures", .tags(.integration), .timeLimit(.minutes(1))) struct BootstrapFailureTests {
+@Suite("Bootstrap failures", .tags(.integration), .serialized, .timeLimit(.minutes(1))) struct BootstrapFailureTests {
     private func configure(endpoint: String,
                            settings: TelemetrySettings,
                            storageRoot: URL,

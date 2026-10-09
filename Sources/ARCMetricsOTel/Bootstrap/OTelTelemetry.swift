@@ -39,6 +39,8 @@ public actor OTelTelemetry {
     }
 
     deinit {
+        // Closes the queue, so the consumer ends instead of waiting for a command that never comes.
+        ingress.finish()
         executor.stop()
     }
 
@@ -54,13 +56,11 @@ public actor OTelTelemetry {
         }
         let stream = ingress.stream
         // Nonisolated: it captures `self` weakly, so it does not inherit the actor's isolation
-        // and hops onto the actor once per command. It ends when `shutdown()` finishes the stream.
+        // and hops onto the actor once per command. It ends when `shutdown()` or `deinit` finishes
+        // the stream; commands still queued after a release are skipped.
         consumer = Task { [weak self] in
             for await command in stream {
-                guard let self else {
-                    return
-                }
-                await handle(command)
+                await self?.handle(command)
             }
         }
     }

@@ -5,7 +5,7 @@ import OpenTelemetrySdk
 import Testing
 @testable import ARCMetricsOTel
 
-@Suite("Acceptance: session-consistent sampling", .tags(.integration, .critical), .timeLimit(.minutes(1)))
+@Suite("Acceptance: session-consistent sampling", .tags(.integration, .critical), .serialized, .timeLimit(.minutes(1)))
 struct SamplingAcceptanceTests {
     private let rate = 0.5
 

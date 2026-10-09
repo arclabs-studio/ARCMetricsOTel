@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import ARCMetricsOTel
 
-@Suite("Acceptance: export status handling", .tags(.integration, .critical), .timeLimit(.minutes(1)))
+@Suite("Acceptance: export status handling", .tags(.integration, .critical), .serialized, .timeLimit(.minutes(1)))
 struct ExportStatusAcceptanceTests {
     private func traceAttempts(_ sut: IntegrationSUT) -> Int {
         sut.requests.filter { $0.path.hasSuffix("/v1/traces") }.count
