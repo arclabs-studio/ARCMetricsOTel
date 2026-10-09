@@ -20,14 +20,22 @@ ARCMetricsOTel exports spans and logs over OTLP/HTTP, built on
 OpenTelemetry companion to [ARCMetrics](https://github.com/arclabs-studio/ARCMetrics), which
 stays dependency-free.
 
-### Key Features (planned for 1.0.0)
+### Key Features (1.0.0)
 
 - ✅ **OTLP/HTTP export** of spans and logs, with a disk buffer for offline runs
 - ✅ **Sessions** — 15 min idle, 4 h max, `session.id` and `session.previous_id` on every record
 - ✅ **Session-consistent head sampling** and a remote **kill switch**
-- ✅ **MetricKit bridge** — ARCMetrics summaries become spans, `app.crash` and `app.hang` events
-- ✅ **App lifecycle** events and a SwiftUI `.trackScreen(_:)` modifier
-- ✅ **Privacy** — attribute and URL scrubbing, no PII attributes by default
+- 🔜 **MetricKit bridge** — ARCMetrics summaries become spans, `app.crash` and `app.hang` events
+- 🔜 **App lifecycle** events and a SwiftUI `.trackScreen(_:)` modifier
+- 🔜 **Privacy** — attribute and URL scrubbing (no PII attributes are emitted by default today)
+
+### Privacy: what links sessions together
+
+`session.previous_id` is persisted across launches (in `UserDefaults`; it is a random id, not a
+secret), so a collector can chain every session of an install from its first launch onwards.
+Together with `device.model.identifier`, `os.version` and the client IP, that works as a
+pseudonymous install identifier. Apps using this package must declare it in their privacy
+manifest and App Store privacy label.
 
 ---
 
