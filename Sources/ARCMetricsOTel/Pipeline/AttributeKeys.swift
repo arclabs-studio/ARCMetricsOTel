@@ -11,4 +11,9 @@ enum AttributeKeys {
     static let osVersion = "os.version"
     static let osType = "os.type"
     static let deviceModelIdentifier = "device.model.identifier"
+    static let exceptionType = "exception.type"
+    static let exceptionSignal = "exception.signal"
+    static let exceptionTerminationReason = "exception.termination_reason"
+    static let hangDuration = "app.hang.duration_s"
+    static let appState = "ios.app.state"
 }
