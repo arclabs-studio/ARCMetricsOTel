@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   events become info log records. Combine it with `MetricKitSignpostTracer` through `TeeTracer`.
   The span category is not exported; a span that is never ended is never exported.
 - While the kill switch is off, recording calls return before enqueuing anything.
+- `MetricKitBridge` sends ARCMetrics metric summaries as `MXMetricPayload` spans and diagnostics as
+  `app.crash` / `app.hang` events. Reports join the session current when they arrive.
+- `AppLifecycleObserver` records `device.app.lifecycle` events with `ios.app.state` from
+  `NotificationLifecycleSource` (or any `LifecycleEventSource`) and flushes on background.
+- `OTelTelemetry.emitEvent(_:attributes:severity:timestamp:)` records an event with an
+  `EventSeverity` and an optional past timestamp.
 
 ### Changed
 

@@ -27,8 +27,10 @@ stays dependency-free.
 - ✅ **Session-consistent head sampling** and a remote **kill switch**
 - ✅ **ARCMetrics tracing** — `telemetry.tracer` adapts ARCMetrics `Tracing`; with `TeeTracer`
   each span reaches MetricKit and the collector together
-- 🔜 **MetricKit bridge** — ARCMetrics summaries become spans, `app.crash` and `app.hang` events
-- 🔜 **App lifecycle** events and a SwiftUI `.trackScreen(_:)` modifier
+- ✅ **MetricKit bridge** — ARCMetrics summaries become `MXMetricPayload` spans, `app.crash` and
+  `app.hang` events
+- ✅ **App lifecycle** — `device.app.lifecycle` events, and a flush when the app goes to the background
+- 🔜 A SwiftUI `.trackScreen(_:)` modifier
 - 🔜 **Privacy** — attribute and URL scrubbing (no PII attributes are emitted by default today)
 
 ### Tracing with ARCMetrics
@@ -47,6 +49,34 @@ A span's `parent` becomes its OpenTelemetry parent; a thrown error ends it with 
 that is never ended is never exported. Attributes leave the device: never put personal data in
 them.
 
+### MetricKit and app lifecycle
+
+```swift
+let bridge = MetricKitBridge(collector: collector, telemetry: telemetry)
+let lifecycle = AppLifecycleObserver(telemetry: telemetry)
+Task { await bridge.run() }
+Task { await lifecycle.run() }
+collector.startCollecting()
+```
+
+- Each ARCMetrics metric summary becomes one `MXMetricPayload` span over the report's interval.
+  Where a value means exactly what upstream opentelemetry-swift's MetricKit instrumentation
+  reports, the attribute uses upstream's name and base unit (`metrickit.memory.peak_memory_usage`
+  in bytes, `metrickit.cpu.cpu_time` in seconds, …), so its dashboards work. Where ARCMetrics
+  computes something different, the name is our own and carries the unit:
+  `metrickit.app_responsiveness.hang_time_total_s`, `metrickit.app_launch.time_to_first_draw_average_s`,
+  `metrickit.animation.hitch_time_ratio_ms_per_s` and `…scroll_hitch_time_ratio_ms_per_s`.
+- Each crash becomes an `app.crash` event (fatal) with `exception.type`, `exception.signal` and
+  `exception.termination_reason`; each hang an `app.hang` event (warn) with `app.hang.duration_s`.
+  The crash's virtual-memory region is never exported.
+- Reports describe the past but join the session current when they arrive. They follow sampling
+  and the kill switch. The bridge never starts the collector: the app owns it.
+- `AppLifecycleObserver` records each transition with `ios.app.state` and flushes after
+  `background`. `telemetry.emitEvent(_:attributes:severity:timestamp:)` records any other event;
+  its name and attributes leave the device, so use constant names and no personal data.
+- `exception.termination_reason` is exported only in its structured form
+  (`Namespace SIGNAL, Code 11`); free text the OS appends, such as a library path, is left out.
+
 ### Privacy: what links sessions together
 
 `session.previous_id` is persisted across launches (in `UserDefaults`; it is a random id, not a
@@ -54,6 +84,10 @@ secret), so a collector can chain every session of an install from its first lau
 Together with `device.model.identifier`, `os.version` and the client IP, that works as a
 pseudonymous install identifier. Apps using this package must declare it in their privacy
 manifest and App Store privacy label.
+
+With the MetricKit bridge running, the app also sends crash data (`app.crash`) and performance
+data (`MXMetricPayload`, `app.hang`): declare **Diagnostics — Crash Data** and **Diagnostics —
+Performance Data** as well.
 
 ---
 

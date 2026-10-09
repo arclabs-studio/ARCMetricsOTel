@@ -1,3 +1,4 @@
+import ARCMetrics
 import Foundation
 import OpenTelemetryApi
 
@@ -148,10 +149,56 @@ public actor OTelTelemetry {
         ingress.send(.endSpan(SpanEnd(id: id, errorType: errorType, attributes: attributes, time: clock.now)))
     }
 
-    /// Enqueues a log event.
-    nonisolated func emitEvent(name: String, attributes: [String: AttributeValue], severity: Severity) {
+    /// Enqueues a log event, timestamped `timestamp` or now.
+    ///
+    /// The record joins the session current now, even when `timestamp` is in the past.
+    nonisolated func emitEvent(name: String,
+                               attributes: [String: AttributeValue],
+                               severity: Severity,
+                               timestamp: Date? = nil) {
         guard gate.isEnabled else { return }
-        ingress.send(.event(EventRecord(name: name, attributes: attributes, severity: severity, time: clock.now)))
+        let now = clock.now
+        ingress.send(.event(EventRecord(name: name,
+                                        attributes: attributes,
+                                        severity: severity,
+                                        time: timestamp ?? now,
+                                        sessionTime: now)))
+    }
+
+    /// Enqueues a span that ran from `start` to `end`, with no parent.
+    ///
+    /// The span joins the session current now, even when it ran in the past.
+    nonisolated func recordSpan(name: String, attributes: [String: AttributeValue], start: Date, end: Date) {
+        guard gate.isEnabled else { return }
+        ingress.send(.completedSpan(CompletedSpan(name: name,
+                                                  attributes: attributes,
+                                                  start: start,
+                                                  end: end,
+                                                  sessionTime: clock.now)))
+    }
+}
+
+// MARK: - Events
+
+public extension OTelTelemetry {
+    /// Records a log event named `name`.
+    ///
+    /// Returns immediately. The event is stamped with the current session, like every record, and
+    /// follows the kill switch and session sampling.
+    ///
+    /// - Parameters:
+    ///   - name: The event name, for example `cache.purge`. It is exported: use a constant, never
+    ///     a string built from user data.
+    ///   - attributes: The event's attributes. Never put personal data here.
+    ///   - severity: The record's severity.
+    ///   - timestamp: When the event happened; now when `nil`. A past timestamp does not affect
+    ///     sessions: the event joins the session current at the time of this call.
+    nonisolated func emitEvent(_ name: String,
+                               attributes: TraceAttributes = [:],
+                               severity: EventSeverity = .info,
+                               timestamp: Date? = nil) {
+        emitEvent(name: name, attributes: attributes.otelAttributes, severity: severity.otelSeverity,
+                  timestamp: timestamp)
     }
 }
 
@@ -205,25 +252,30 @@ private extension OTelTelemetry {
     }
 
     func handle(_ command: TelemetryCommand) {
+        guard let pipeline = activePipeline else {
+            // Records are dropped, but a flush waiting on a barrier must still return.
+            if case let .barrier(continuation) = command {
+                continuation.resume()
+            }
+            return
+        }
+        handle(command, in: pipeline)
+    }
+
+    func handle(_ command: TelemetryCommand, in pipeline: Pipeline) {
         switch command {
         case let .barrier(continuation):
             continuation.resume()
         case let .startSpan(start):
-            if let pipeline = activePipeline {
-                startSpan(start, in: pipeline)
-            }
+            startSpan(start, in: pipeline)
         case let .endSpan(end):
-            if let pipeline = activePipeline {
-                endSpan(end, in: pipeline)
-            }
+            endSpan(end, in: pipeline)
         case let .event(event):
-            if let pipeline = activePipeline {
-                emitLog(event, session: session(at: event.time, in: pipeline), in: pipeline)
-            }
+            emitLog(event, session: session(at: event.sessionTime, in: pipeline), in: pipeline)
+        case let .completedSpan(span):
+            recordSpan(span, in: pipeline)
         case let .resetSession(time):
-            if let pipeline = activePipeline {
-                announce(tracker.reset(at: time), at: time, in: pipeline)
-            }
+            announce(tracker.reset(at: time), at: time, in: pipeline)
         }
     }
 
@@ -252,6 +304,17 @@ private extension OTelTelemetry {
             span.setAttribute(key: AttributeKeys.errorType, value: .string(errorType))
         }
         span.end(time: end.time)
+    }
+
+    func recordSpan(_ completed: CompletedSpan, in pipeline: Pipeline) {
+        let session = session(at: completed.sessionTime, in: pipeline)
+        let builder = pipeline.tracer.spanBuilder(spanName: completed.name)
+            .setStartTime(time: completed.start)
+            .setNoParent()
+        for (key, value) in stamped(completed.attributes, with: session) {
+            builder.setAttribute(key: key, value: value)
+        }
+        builder.startSpan().end(time: completed.end)
     }
 
     /// Records activity at `time` and returns its session, announcing any session change.
