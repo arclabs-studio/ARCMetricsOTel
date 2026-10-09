@@ -68,22 +68,21 @@ jobs:
           test -n "$UDID" && test "$UDID" != "null"
           echo "udid=$UDID" >> $GITHUB_OUTPUT
 
-      # TEMPORARY (FVRS-348): some runs stall for minutes. If tests are still running after
-      # 5.5 min (a healthy run finishes in ~4.5), sample every test process's threads so the
-      # stall can be diagnosed. Remove once the cause is fixed.
+      # TEMPORARY (FVRS-348): some runs stall for minutes. While xcodebuild is still running,
+      # spindump the test process every 30 s from ~3.3 min in, so the stall can be diagnosed.
+      # Remove once the cause is fixed.
       - name: Start stall watchdog
         run: |
           mkdir -p stall-samples
           nohup bash -c '
-            sleep 330
-            for round in 1 2 3 4 5 6; do
+            sleep 200
+            for round in 1 2 3 4 5 6 7 8; do
               pgrep -x xcodebuild >/dev/null || exit 0
-              for pid in $(pgrep -x xctest) $(pgrep -f "ARCMetricsOTelTests"); do
-                sudo sample "$pid" 3 -mayDie -file "stall-samples/sample-$round-$pid.txt" || true
+              for pid in $(pgrep -x xctest); do
+                sudo spindump "$pid" 5 10 -file "stall-samples/spindump-$round-$pid.txt" || true
               done
-              ps -axo pid,ppid,pcpu,state,qos,command > "stall-samples/ps-$round.txt" 2>&1 || \
-                ps -axo pid,ppid,pcpu,state,command > "stall-samples/ps-$round.txt"
-              sleep 45
+              ps -axo pid,ppid,pcpu,state,command > "stall-samples/ps-$round.txt"
+              sleep 30
             done
           ' > stall-samples/watchdog.log 2>&1 &
 
