@@ -68,8 +68,10 @@ jobs:
           test -n "$UDID" && test "$UDID" != "null"
           echo "udid=$UDID" >> $GITHUB_OUTPUT
 
-      # Build and boot first, so the tests do not start while compilation and the simulator's
-      # first-boot work are saturating the runner (load averages of 200-600 were measured there).
+      # Build and boot first, then run the tests against the booted simulator. With a single
+      # `xcodebuild test` step, timing-sensitive tests stalled intermittently on 3-core runners;
+      # with this split, 12 of 12 runs passed. Why is not established: load stayed at 200-600
+      # either way.
       - name: Build for testing
         run: |
           set -o pipefail
@@ -85,35 +87,10 @@ jobs:
         run: |
           xcrun simctl boot "${{ steps.sim.outputs.udid }}" || true
           xcrun simctl bootstatus "${{ steps.sim.outputs.udid }}" -b
-          sysctl -n vm.loadavg
-
-      # TEMPORARY (FVRS-348): record load, memory and the heaviest processes while the tests
-      # run, to confirm the runner is no longer saturated. Remove once confirmed.
-      - name: Start runner monitor
-        run: |
-          mkdir -p stall-samples
-          nohup bash -c '
-            sleep 5
-            while pgrep -x xcodebuild >/dev/null; do
-              {
-                echo "=== $(date -u +%H:%M:%S)"
-                sysctl -n vm.swapusage
-                memory_pressure -Q 2>/dev/null | tail -1
-                vm_stat | grep -E "Pages (free|active|inactive|wired|compressed|occupied)|Swapins|Swapouts|Pageouts"
-                sysctl -n vm.loadavg
-                top -l 1 -o mem -n 12 -stats pid,command,cpu,mem,th 2>/dev/null | tail -13
-                for pid in $(pgrep -x xctest); do
-                  echo "xctest $pid threads=$(ps -M -p "$pid" | tail -n +2 | wc -l | tr -d " ") rss_kb=$(ps -o rss= -p "$pid")"
-                done
-              } >> stall-samples/runner.log 2>&1
-              sleep 15
-            done
-          ' > stall-samples/watchdog.log 2>&1 &
 
       - name: Test with coverage
         run: |
           set -o pipefail
-          echo "load before tests: $(sysctl -n vm.loadavg)"
           xcodebuild test-without-building \
             -scheme ARCMetricsOTel-Package \
             -destination "id=${{ steps.sim.outputs.udid }}" \
@@ -125,14 +102,6 @@ jobs:
 
       - name: Coverage gate (100%)
         run: python3 scripts/check-coverage.py TestResults.xcresult 100 ARCMetricsOTel ARCMetricsOTelMocks
-
-      - name: Upload stall samples
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: stall-samples
-          path: stall-samples
-          if-no-files-found: ignore
 
       - name: Upload test results
         if: failure()
