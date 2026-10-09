@@ -1,5 +1,5 @@
+import ARCMetrics
 import Foundation
-import OpenTelemetryApi
 
 /// A span to start.
 struct SpanStart {
@@ -8,6 +8,6 @@ struct SpanStart {
     let name: String
     /// The token of the parent span, if it is still open.
     let parentID: UInt64?
-    let attributes: [String: AttributeValue]
+    let attributes: TraceAttributes
     let time: Date
 }

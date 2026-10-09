@@ -1,10 +1,11 @@
+import ARCMetrics
 import Foundation
 import OpenTelemetryApi
 
 /// A log event to emit.
 struct EventRecord {
     let name: String
-    let attributes: [String: AttributeValue]
+    let attributes: TraceAttributes
     let severity: Severity
     /// The record's timestamp.
     let time: Date
@@ -12,7 +13,7 @@ struct EventRecord {
     /// record about the past (a MetricKit report) cannot end or rotate the current session.
     let sessionTime: Date
 
-    init(name: String, attributes: [String: AttributeValue], severity: Severity, time: Date, sessionTime: Date? = nil) {
+    init(name: String, attributes: TraceAttributes, severity: Severity, time: Date, sessionTime: Date? = nil) {
         self.name = name
         self.attributes = attributes
         self.severity = severity

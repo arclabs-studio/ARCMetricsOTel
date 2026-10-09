@@ -16,4 +16,5 @@ enum AttributeKeys {
     static let exceptionTerminationReason = "exception.termination_reason"
     static let hangDuration = "app.hang.duration_s"
     static let appState = "ios.app.state"
+    static let screenName = "app.screen.name"
 }

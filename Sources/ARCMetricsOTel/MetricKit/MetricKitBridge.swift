@@ -61,7 +61,7 @@ private extension MetricKitBridge {
     func record(_ summary: MetricSummary) {
         guard let interval = summary.interval else { return }
         telemetry.recordSpan(name: MetricKitKeys.spanName,
-                             attributes: summary.otelAttributes,
+                             attributes: summary.traceAttributes,
                              start: interval.start,
                              end: interval.end)
     }
@@ -70,7 +70,7 @@ private extension MetricKitBridge {
         guard let interval = summary.interval else { return }
         for crash in summary.crashes {
             telemetry.emitEvent(name: EventNames.crash,
-                                attributes: crash.otelAttributes,
+                                attributes: crash.traceAttributes,
                                 severity: .fatal,
                                 timestamp: interval.end)
         }

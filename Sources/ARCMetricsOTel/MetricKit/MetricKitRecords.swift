@@ -1,14 +1,13 @@
 import ARCMetrics
 import Foundation
-import OpenTelemetryApi
 
 /// ARCMetrics reports megabytes as decimal megabytes (`UnitInformationStorage.megabytes`).
 private let bytesPerMegabyte = 1_000_000.0
 
 extension MetricSummary {
     /// The metric span's attributes. The hitch ratios appear only when MetricKit reported them.
-    var otelAttributes: [String: AttributeValue] {
-        var attributes: [String: AttributeValue] = [:]
+    var traceAttributes: TraceAttributes {
+        var attributes: TraceAttributes = [:]
         attributes[MetricKitKeys.peakMemory] = .double(peakMemoryUsageMB * bytesPerMegabyte)
         attributes[MetricKitKeys.suspendedMemoryAverage] = .double(averageMemoryUsageMB * bytesPerMegabyte)
         attributes[MetricKitKeys.cpuTime] = .double(cumulativeCPUTimeSeconds)
@@ -36,8 +35,8 @@ extension DiagnosticSummary.CrashInfo {
     /// The crash's `exception.*` attributes, for the fields MetricKit reported.
     /// `virtualMemoryRegionInfo` is left out: it can hold memory addresses.
     /// `terminationReason` is kept only in its structured form (see ``structuredTerminationReason``).
-    var otelAttributes: [String: AttributeValue] {
-        var attributes: [String: AttributeValue] = [:]
+    var traceAttributes: TraceAttributes {
+        var attributes: TraceAttributes = [:]
         if let exceptionType {
             attributes[AttributeKeys.exceptionType] = .string(exceptionType)
         }

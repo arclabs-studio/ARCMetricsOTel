@@ -123,13 +123,15 @@ struct IntegrationSUT {
                         sessionIDs: [String] = ["session-1", "session-2", "session-3"],
                         store: InMemorySessionStore = InMemorySessionStore(),
                         exporters: ExporterOverride? = nil,
-                        storageRoot: URL? = nil) async throws -> IntegrationSUT {
+                        storageRoot: URL? = nil,
+                        attributeScrubber: AttributeScrubber = .default) async throws -> IntegrationSUT {
         let testID = UUID().uuidString
         let scratch = TemporaryDirectory()
         let clock = FakeClock()
         StubServer.shared.register(testID: testID, behavior: behavior)
         let configuration = try TestConfiguration.make(headers: [StubServer.testIDHeader: testID],
-                                                       settings: settings)
+                                                       settings: settings,
+                                                       attributeScrubber: attributeScrubber)
         let dependencies = makeDependencies(clock: clock,
                                             store: store,
                                             sessionIDs: sessionIDs,

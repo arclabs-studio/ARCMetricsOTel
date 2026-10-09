@@ -46,6 +46,11 @@ public struct OTelConfiguration: Sendable {
     /// development. Honoured in Debug builds only: Release builds ignore it.
     public var allowsInsecureTransport: Bool
 
+    /// Scrubs every record's attributes. It is called once per record on the telemetry thread,
+    /// when the record is taken from the queue and before it is created. Defaults to
+    /// ``AttributeScrubber/default``.
+    public var attributeScrubber: AttributeScrubber
+
     /// Creates a configuration.
     ///
     /// - Parameters:
@@ -58,6 +63,7 @@ public struct OTelConfiguration: Sendable {
     ///   - sessionPolicy: When sessions end. Defaults to ``SessionPolicy/faro``.
     ///   - exportTimeout: The longest an export or flush may block. Defaults to 10 seconds.
     ///   - allowsInsecureTransport: Allows `http` on a non-loopback host in Debug builds. Defaults to `false`.
+    ///   - attributeScrubber: Scrubs every record's attributes. Defaults to ``AttributeScrubber/default``.
     public init(serviceName: String,
                 serviceVersion: String,
                 environment: String,
@@ -66,7 +72,8 @@ public struct OTelConfiguration: Sendable {
                 initialSettings: TelemetrySettings = .disabled,
                 sessionPolicy: SessionPolicy = .faro,
                 exportTimeout: Duration = .seconds(10),
-                allowsInsecureTransport: Bool = false) {
+                allowsInsecureTransport: Bool = false,
+                attributeScrubber: AttributeScrubber = .default) {
         self.serviceName = serviceName
         self.serviceVersion = serviceVersion
         self.environment = environment
@@ -76,6 +83,7 @@ public struct OTelConfiguration: Sendable {
         self.sessionPolicy = sessionPolicy
         self.exportTimeout = exportTimeout
         self.allowsInsecureTransport = allowsInsecureTransport
+        self.attributeScrubber = attributeScrubber
     }
 }
 

@@ -5,4 +5,5 @@ enum EventNames {
     static let crash = "app.crash"
     static let hang = "app.hang"
     static let lifecycle = "device.app.lifecycle"
+    static let screenView = "app.screen.view"
 }

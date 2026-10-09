@@ -29,15 +29,15 @@ public struct OTelTracer: Tracing {
         telemetry.startSpan(id: span.id,
                             name: "\(span.name)",
                             parentID: span.parentID,
-                            attributes: attributes.otelAttributes)
+                            attributes: attributes)
     }
 
     public func end(_ span: TraceSpan, outcome: TraceOutcome, attributes: TraceAttributes) {
-        telemetry.endSpan(id: span.id, errorType: outcome.errorType, attributes: attributes.otelAttributes)
+        telemetry.endSpan(id: span.id, errorType: outcome.errorType, attributes: attributes)
     }
 
     public func event(_ name: StaticString, category _: SignpostCategory, attributes: TraceAttributes) {
-        telemetry.emitEvent(name: "\(name)", attributes: attributes.otelAttributes, severity: .info)
+        telemetry.emitEvent(name: "\(name)", attributes: attributes, severity: .info)
     }
 }
 

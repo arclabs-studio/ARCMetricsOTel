@@ -31,6 +31,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NotificationLifecycleSource` (or any `LifecycleEventSource`) and flushes on background.
 - `OTelTelemetry.emitEvent(_:attributes:severity:timestamp:)` records an event with an
   `EventSeverity` and an optional past timestamp.
+- `AttributeScrubber` (`OTelConfiguration.attributeScrubber`, `.default`, `then(_:)`) scrubs every
+  record's attributes in the telemetry actor before `session.id` is stamped. The default follows
+  OpenTelemetry's semantic conventions and Apple's App Privacy data types: it drops personal-data
+  keys (by name, and by key segment including camelCase) and redacts credentials, queries and
+  fragments in `url.*` values.
+- The package ships a privacy manifest (`PrivacyInfo.xcprivacy`).
+- `View.trackScreen(_:attributes:)` records `app.screen.view` with `app.screen.name` through the
+  `TelemetryEmitting` set with `View.telemetry(_:)`; `RecordingTelemetryEmitter` in
+  `ARCMetricsOTelMocks` records events for tests and previews.
+- DocC catalog: Getting Started, Kill Switch and Sampling, Sessions, Offline Buffering, Privacy,
+  MetricKit Bridge and Local Grafana.
 
 ### Changed
 
