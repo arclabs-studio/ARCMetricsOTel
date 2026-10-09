@@ -25,9 +25,27 @@ stays dependency-free.
 - ✅ **OTLP/HTTP export** of spans and logs, with a disk buffer for offline runs
 - ✅ **Sessions** — 15 min idle, 4 h max, `session.id` and `session.previous_id` on every record
 - ✅ **Session-consistent head sampling** and a remote **kill switch**
+- ✅ **ARCMetrics tracing** — `telemetry.tracer` adapts ARCMetrics `Tracing`; with `TeeTracer`
+  each span reaches MetricKit and the collector together
 - 🔜 **MetricKit bridge** — ARCMetrics summaries become spans, `app.crash` and `app.hang` events
 - 🔜 **App lifecycle** events and a SwiftUI `.trackScreen(_:)` modifier
 - 🔜 **Privacy** — attribute and URL scrubbing (no PII attributes are emitted by default today)
+
+### Tracing with ARCMetrics
+
+```swift
+let tracer = TeeTracer([MetricKitSignpostTracer(), telemetry.tracer])
+
+let restaurants = try await tracer.trace("FetchAll", category: .persistence,
+                                         attributes: ["store": "cloudkit"]) { _ in
+    try await repository.fetchAll()
+}
+```
+
+A span's `parent` becomes its OpenTelemetry parent; a thrown error ends it with status error and
+`error.type` (the type name, never the message). The span category is not exported, and a span
+that is never ended is never exported. Attributes leave the device: never put personal data in
+them.
 
 ### Privacy: what links sessions together
 

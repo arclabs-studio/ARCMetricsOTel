@@ -110,6 +110,11 @@ public actor OTelTelemetry {
         await task.value
     }
 
+    /// A tracer that records ARCMetrics spans and events through this pipeline.
+    public nonisolated var tracer: OTelTracer {
+        OTelTracer(telemetry: self)
+    }
+
     /// Ends the current session and starts a new one, as if it had expired.
     ///
     /// Queued like every record, so records enqueued earlier keep the old session.
@@ -117,13 +122,19 @@ public actor OTelTelemetry {
         ingress.send(.resetSession(clock.now))
     }
 
-    // MARK: Recording (internal until the public tracing and event APIs)
+    // MARK: Recording (internal: `tracer` is the public entry point for spans)
+
+    //
+    // While the kill switch is off these return before reading the clock or enqueuing, so a
+    // disabled app pays almost nothing per call. `handle(_:)` still drops anything enqueued just
+    // before a disable.
 
     /// Enqueues the start of a span.
     nonisolated func startSpan(id: UInt64,
                                name: String,
                                parentID: UInt64?,
                                attributes: [String: AttributeValue]) {
+        guard gate.isEnabled else { return }
         ingress.send(.startSpan(SpanStart(id: id,
                                           name: name,
                                           parentID: parentID,
@@ -133,11 +144,13 @@ public actor OTelTelemetry {
 
     /// Enqueues the end of a span. `errorType` marks it failed.
     nonisolated func endSpan(id: UInt64, errorType: String?, attributes: [String: AttributeValue]) {
+        guard gate.isEnabled else { return }
         ingress.send(.endSpan(SpanEnd(id: id, errorType: errorType, attributes: attributes, time: clock.now)))
     }
 
     /// Enqueues a log event.
     nonisolated func emitEvent(name: String, attributes: [String: AttributeValue], severity: Severity) {
+        guard gate.isEnabled else { return }
         ingress.send(.event(EventRecord(name: name, attributes: attributes, severity: severity, time: clock.now)))
     }
 }

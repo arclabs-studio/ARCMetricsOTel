@@ -68,13 +68,34 @@ jobs:
           test -n "$UDID" && test "$UDID" != "null"
           echo "udid=$UDID" >> $GITHUB_OUTPUT
 
-      - name: Test with coverage
+      # Build and boot first, then run the tests against the booted simulator. With a single
+      # `xcodebuild test` step, timing-sensitive tests stalled intermittently on 3-core runners;
+      # with this split, 12 of 12 runs passed. Why is not established: load stayed at 200-600
+      # either way.
+      - name: Build for testing
         run: |
           set -o pipefail
-          xcodebuild test \
+          xcodebuild build-for-testing \
             -scheme ARCMetricsOTel-Package \
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -clonedSourcePackagesDirPath .build/SourcePackages \
+            -derivedDataPath .build/DerivedData \
+            -enableCodeCoverage YES \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Boot the simulator
+        run: |
+          xcrun simctl boot "${{ steps.sim.outputs.udid }}" || true
+          xcrun simctl bootstatus "${{ steps.sim.outputs.udid }}" -b
+
+      - name: Test with coverage
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -scheme ARCMetricsOTel-Package \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -clonedSourcePackagesDirPath .build/SourcePackages \
+            -derivedDataPath .build/DerivedData \
             -enableCodeCoverage YES \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO

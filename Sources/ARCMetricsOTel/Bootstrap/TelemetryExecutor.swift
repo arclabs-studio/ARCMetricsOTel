@@ -25,7 +25,9 @@ final class TelemetryExecutor: SerialExecutor {
             run()
         }
         thread.name = name
-        thread.qualityOfService = .utility
+        // `.default`, not `.utility`: tests waiting on this thread stalled for minutes on three-core
+        // CI runners, and starvation of a utility-QoS thread is the suspected cause. The work is brief.
+        thread.qualityOfService = .default
         thread.start()
     }
 

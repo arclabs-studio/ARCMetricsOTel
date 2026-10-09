@@ -18,9 +18,11 @@ let package = Package(name: "ARCMetricsOTel",
 
                       // MARK: - Dependencies
 
-                      // Approved third-party exception for this package only — see
+                      // ARCMetrics provides the `Tracing` seam. opentelemetry-swift is an approved
+                      // third-party exception for this package only — see
                       // docs/adr/0001-opentelemetry-swift-dependency.md.
-                      dependencies: [.package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git",
+                      dependencies: [.package(url: "https://github.com/arclabs-studio/ARCMetrics.git", from: "2.1.0"),
+                                     .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git",
                                               .upToNextMinor(from: "2.6.0")),
                                      .package(url: "https://github.com/open-telemetry/opentelemetry-swift.git",
                                               .upToNextMinor(from: "2.6.0"))],
@@ -29,7 +31,8 @@ let package = Package(name: "ARCMetricsOTel",
 
                       targets: [// Main library
                           .target(name: "ARCMetricsOTel",
-                                  dependencies: [.product(name: "OpenTelemetryApi",
+                                  dependencies: [.product(name: "ARCMetrics", package: "ARCMetrics"),
+                                                 .product(name: "OpenTelemetryApi",
                                                           package: "opentelemetry-swift-core"),
                                                  .product(name: "OpenTelemetrySdk",
                                                           package: "opentelemetry-swift-core"),
@@ -48,6 +51,7 @@ let package = Package(name: "ARCMetricsOTel",
                           .testTarget(name: "ARCMetricsOTelTests",
                                       dependencies: ["ARCMetricsOTel",
                                                      "ARCMetricsOTelMocks",
+                                                     .product(name: "ARCMetricsMocks", package: "ARCMetrics"),
                                                      .product(name: "InMemoryExporter",
                                                               package: "opentelemetry-swift")],
                                       path: "Tests/ARCMetricsOTelTests")],
