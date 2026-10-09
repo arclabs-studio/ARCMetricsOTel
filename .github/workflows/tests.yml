@@ -68,6 +68,25 @@ jobs:
           test -n "$UDID" && test "$UDID" != "null"
           echo "udid=$UDID" >> $GITHUB_OUTPUT
 
+      # TEMPORARY (FVRS-348): some runs stall for minutes. If tests are still running after
+      # 5.5 min (a healthy run finishes in ~4.5), sample every test process's threads so the
+      # stall can be diagnosed. Remove once the cause is fixed.
+      - name: Start stall watchdog
+        run: |
+          mkdir -p stall-samples
+          nohup bash -c '
+            sleep 330
+            for round in 1 2 3 4 5 6; do
+              pgrep -x xcodebuild >/dev/null || exit 0
+              for pid in $(pgrep -x xctest) $(pgrep -f "ARCMetricsOTelTests"); do
+                sudo sample "$pid" 3 -mayDie -file "stall-samples/sample-$round-$pid.txt" || true
+              done
+              ps -axo pid,ppid,pcpu,state,qos,command > "stall-samples/ps-$round.txt" 2>&1 || \
+                ps -axo pid,ppid,pcpu,state,command > "stall-samples/ps-$round.txt"
+              sleep 45
+            done
+          ' > stall-samples/watchdog.log 2>&1 &
+
       - name: Test with coverage
         run: |
           set -o pipefail
@@ -81,6 +100,14 @@ jobs:
 
       - name: Coverage gate (100%)
         run: python3 scripts/check-coverage.py TestResults.xcresult 100 ARCMetricsOTel ARCMetricsOTelMocks
+
+      - name: Upload stall samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stall-samples
+          path: stall-samples
+          if-no-files-found: ignore
 
       - name: Upload test results
         if: failure()
