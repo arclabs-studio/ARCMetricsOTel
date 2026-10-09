@@ -68,21 +68,27 @@ jobs:
           test -n "$UDID" && test "$UDID" != "null"
           echo "udid=$UDID" >> $GITHUB_OUTPUT
 
-      # TEMPORARY (FVRS-348): some runs stall for minutes. While xcodebuild is still running,
-      # spindump the test process every 30 s from ~3.3 min in, so the stall can be diagnosed.
+      # TEMPORARY (FVRS-348): some runs stall for minutes. Record host memory, swap and the
+      # heaviest processes every 15 s while xcodebuild runs, to test the memory-pressure theory.
       # Remove once the cause is fixed.
-      - name: Start stall watchdog
+      - name: Start runner monitor
         run: |
           mkdir -p stall-samples
           nohup bash -c '
-            sleep 200
-            for round in 1 2 3 4 5 6 7 8; do
-              pgrep -x xcodebuild >/dev/null || exit 0
-              for pid in $(pgrep -x xctest); do
-                sudo spindump "$pid" 5 10 -file "stall-samples/spindump-$round-$pid.txt" || true
-              done
-              ps -axo pid,ppid,pcpu,state,command > "stall-samples/ps-$round.txt"
-              sleep 30
+            sleep 20
+            while pgrep -x xcodebuild >/dev/null; do
+              {
+                echo "=== $(date -u +%H:%M:%S)"
+                sysctl -n vm.swapusage
+                memory_pressure -Q 2>/dev/null | tail -1
+                vm_stat | grep -E "Pages (free|active|inactive|wired|compressed|occupied)|Swapins|Swapouts|Pageouts"
+                sysctl -n vm.loadavg
+                top -l 1 -o mem -n 12 -stats pid,command,cpu,mem,th 2>/dev/null | tail -13
+                for pid in $(pgrep -x xctest); do
+                  echo "xctest $pid threads=$(ps -M -p "$pid" | tail -n +2 | wc -l | tr -d " ") rss_kb=$(ps -o rss= -p "$pid")"
+                done
+              } >> stall-samples/runner.log 2>&1
+              sleep 15
             done
           ' > stall-samples/watchdog.log 2>&1 &
 
