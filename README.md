@@ -129,7 +129,8 @@ Then add `ARCMetricsOTel` to your target, and `ARCMetricsOTelMocks` to your test
 
 ## 📖 Usage
 
-Usage documentation lands with the public API in 1.0.0.
+See the DocC catalog (*Getting Started* first) and the demo app in
+`Examples/ARCMetricsOTelDemoApp`, which drives every feature against a collector.
 
 ---
 
@@ -141,6 +142,7 @@ ARCMetricsOTel/
 │   ├── ARCMetricsOTel/          # Library
 │   └── ARCMetricsOTelMocks/     # Test doubles for consumers
 ├── Tests/ARCMetricsOTelTests/   # Swift Testing suites
+├── Examples/ARCMetricsOTelDemoApp/  # iPhone demo app (see its README)
 ├── docs/adr/                    # Architecture decision records
 └── scripts/                     # Coverage gate
 ```
