@@ -36,7 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   OpenTelemetry's semantic conventions and Apple's App Privacy data types: it drops personal-data
   keys (by name, and by key segment including camelCase) and redacts credentials, queries and
   fragments in `url.*` values.
-- The package ships a privacy manifest (`PrivacyInfo.xcprivacy`).
+- The package ships a privacy manifest (`PrivacyInfo.xcprivacy`). Besides `UserDefaults` it
+  declares file timestamp (`C617.1`) and system boot time (`35F9.1`) for the opentelemetry-swift
+  code it links, which ships no manifest of its own.
 - `View.trackScreen(_:attributes:)` records `app.screen.view` with `app.screen.name` through the
   `TelemetryEmitting` set with `View.telemetry(_:)`; `RecordingTelemetryEmitter` in
   `ARCMetricsOTelMocks` records events for tests and previews.
