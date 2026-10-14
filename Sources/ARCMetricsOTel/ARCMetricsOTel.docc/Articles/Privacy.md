@@ -45,7 +45,10 @@ nor forge them.
 The package ships its own `PrivacyInfo.xcprivacy`, which Xcode merges into your app's privacy
 report:
 
-- **Required-reason API:** `UserDefaults` (`CA92.1`), to keep the last session id.
+- **Required-reason API:** `UserDefaults` (`CA92.1`), to keep the last session id. Two more cover
+  opentelemetry-swift code linked into your app, which ships no manifest of its own: file
+  timestamps (`C617.1`), because the disk buffer reads its files' metadata in the app container,
+  and system boot time (`35F9.1`), because span durations come from a monotonic clock.
 - **Collected data, not linked to the user and not used for tracking:** Crash Data, Performance
   Data and Other Diagnostic Data (app functionality); Product Interaction (analytics); Device ID —
   `session.id` and the persisted `session.previous_id`, stamped on every record (app functionality

@@ -86,9 +86,9 @@ personal-data keys (`user.email`, `userEmail`, `geo.location.lat`, `auth_token`,
 credentials, queries and fragments in `url.*` values. It is a best-effort backstop: never put
 personal data in attributes or names, and add your own rules with `AttributeScrubber.then(_:)`.
 
-The package ships a `PrivacyInfo.xcprivacy` (UserDefaults `CA92.1`; crash, performance and other
-diagnostic data, product interaction and a device ID, none linked or used for tracking). Your App
-Store privacy label must cover the same data:
+The package ships a `PrivacyInfo.xcprivacy` (UserDefaults `CA92.1`, file timestamp `C617.1` and
+system boot time `35F9.1`; crash, performance and other diagnostic data, product interaction and a
+device ID, none linked or used for tracking). Your App Store privacy label must cover the same data:
 
 | Data the app sends | App Privacy data type |
 |--------------------|-----------------------|
