@@ -83,7 +83,8 @@ collector.startCollecting()
 Every record's attributes pass through an `AttributeScrubber` before they are created. The default
 follows OpenTelemetry's semantic conventions and Apple's App Privacy data types: it drops
 personal-data keys (`user.email`, `userEmail`, `geo.location.lat`, `auth_token`, …) and redacts
-credentials, queries and fragments in `url.*` values. It is a best-effort backstop: never put
+credentials, queries and fragments in URLs under any key, as well as contact values (`mailto:`,
+`tel:`, `sms:`, `facetime:`, `geo:` and their variants). It is a best-effort backstop: never put
 personal data in attributes or names, and add your own rules with `AttributeScrubber.then(_:)`.
 
 The package ships a `PrivacyInfo.xcprivacy` (UserDefaults `CA92.1`, file timestamp `C617.1` and
