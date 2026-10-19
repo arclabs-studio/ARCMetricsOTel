@@ -56,4 +56,4 @@
 # swiftformat over `.`, so without these it reformats the tooling repo's own
 # sources and leaves the submodule dirty. .arc-tools holds downloaded binaries.
 # Mirrors the `excluded:` list in swiftlint.base.yml.
---exclude .build,DerivedData,Pods,Carthage,Generated,ARCDevTools,Tools/ARCDevTools,.arc-tools
+--exclude .build,DerivedData,Pods,Carthage,Generated,ARCDevTools,Tools/ARCDevTools,.arc-tools,.claude

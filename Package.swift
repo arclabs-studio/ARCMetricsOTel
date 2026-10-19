@@ -16,20 +16,46 @@ let package = Package(name: "ARCMetricsOTel",
                                  .library(name: "ARCMetricsOTelMocks",
                                           targets: ["ARCMetricsOTelMocks"])],
 
+                      // MARK: - Dependencies
+
+                      // ARCMetrics provides the `Tracing` seam. opentelemetry-swift is an approved
+                      // third-party exception for this package only — see
+                      // docs/adr/0001-opentelemetry-swift-dependency.md.
+                      dependencies: [.package(url: "https://github.com/arclabs-studio/ARCMetrics.git", from: "2.1.0"),
+                                     .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git",
+                                              .upToNextMinor(from: "2.6.0")),
+                                     .package(url: "https://github.com/open-telemetry/opentelemetry-swift.git",
+                                              .upToNextMinor(from: "2.6.0"))],
+
                       // MARK: - Targets
 
                       targets: [// Main library
                           .target(name: "ARCMetricsOTel",
-                                  path: "Sources/ARCMetricsOTel"),
+                                  dependencies: [.product(name: "ARCMetrics", package: "ARCMetrics"),
+                                                 .product(name: "OpenTelemetryApi",
+                                                          package: "opentelemetry-swift-core"),
+                                                 .product(name: "OpenTelemetrySdk",
+                                                          package: "opentelemetry-swift-core"),
+                                                 .product(name: "OpenTelemetryProtocolExporterHTTP",
+                                                          package: "opentelemetry-swift"),
+                                                 .product(name: "PersistenceExporter",
+                                                          package: "opentelemetry-swift")],
+                                  path: "Sources/ARCMetricsOTel",
+                                  resources: [.copy("PrivacyInfo.xcprivacy")]),
 
                           // Test doubles for consumers of ARCMetricsOTel
                           .target(name: "ARCMetricsOTelMocks",
-                                  dependencies: ["ARCMetricsOTel"],
+                                  dependencies: ["ARCMetricsOTel",
+                                                 .product(name: "ARCMetrics", package: "ARCMetrics")],
                                   path: "Sources/ARCMetricsOTelMocks"),
 
                           // Tests
                           .testTarget(name: "ARCMetricsOTelTests",
-                                      dependencies: ["ARCMetricsOTel", "ARCMetricsOTelMocks"],
+                                      dependencies: ["ARCMetricsOTel",
+                                                     "ARCMetricsOTelMocks",
+                                                     .product(name: "ARCMetricsMocks", package: "ARCMetrics"),
+                                                     .product(name: "InMemoryExporter",
+                                                              package: "opentelemetry-swift")],
                                       path: "Tests/ARCMetricsOTelTests")],
 
                       // MARK: - Swift Language
