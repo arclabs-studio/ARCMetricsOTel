@@ -37,7 +37,16 @@ import Testing
                         Case(url: "ftp://example.com", allowsInsecure: false, error: .invalidEndpoint),
                         Case(url: "ftp://example.com", allowsInsecure: true, error: .invalidEndpoint),
                         Case(url: "file:///tmp/collector", allowsInsecure: true, error: .invalidEndpoint),
-                        Case(url: "https:///v1/traces", allowsInsecure: false, error: .invalidEndpoint)]
+                        Case(url: "https:///v1/traces", allowsInsecure: false, error: .invalidEndpoint),
+                        Case(url: "https://otlp.example.com/v1?token=abc", allowsInsecure: false,
+                             error: .invalidEndpoint),
+                        Case(url: "https://otlp.example.com/v1?", allowsInsecure: false, error: .invalidEndpoint),
+                        Case(url: "https://otlp.example.com/v1#frag", allowsInsecure: false,
+                             error: .invalidEndpoint),
+                        Case(url: "https://otlp.example.com/v1?a=1#frag", allowsInsecure: false,
+                             error: .invalidEndpoint),
+                        Case(url: "http://localhost:4318/v1?a=1", allowsInsecure: false, error: .invalidEndpoint),
+                        Case(url: "https://h/v1#", allowsInsecure: false, error: .invalidEndpoint)]
 
     @Test("Endpoints are accepted or rejected for the documented reason", arguments: cases)
     func validates(_ testCase: Case) throws {
