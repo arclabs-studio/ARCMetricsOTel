@@ -49,6 +49,20 @@ final class TelemetryGate: Sendable {
         }
     }
 
+    /// The discard generation a record made now belongs to, or `nil` while telemetry is disabled.
+    ///
+    /// Read in one step with the kill switch, so a record cannot pass the switch and then miss the
+    /// disable that follows it.
+    var admission: Int? {
+        state.withLock { $0.settings.isEnabled ? $0.discardsRequested : nil }
+    }
+
+    /// Whether telemetry was disabled after a record admitted at `generation`. That disable's
+    /// discard already covers the record, so it must be dropped, even if telemetry is enabled again.
+    func isStale(_ generation: Int) -> Bool {
+        state.withLock { $0.discardsRequested != generation }
+    }
+
     /// The latest discard requested, if one is outstanding.
     var pendingDiscard: Int? {
         state.withLock { $0.discardsCompleted == $0.discardsRequested ? nil : $0.discardsRequested }

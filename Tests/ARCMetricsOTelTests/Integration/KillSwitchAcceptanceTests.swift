@@ -139,4 +139,221 @@ struct KillSwitchAcceptanceTests {
         #expect(names.contains("fresh"))
         #expect(!names.contains("stale"))
     }
+
+    // MARK: A buffer left by an earlier launch
+
+    /// An earlier launch that strands one span on disk: the network is down when it shuts down.
+    private func makeEarlierLaunch(spanName: String) async throws -> IntegrationSUT {
+        let earlier = try await IntegrationSUT.makeSUT(behavior: .offline)
+        earlier.recordSpan(id: 1, name: spanName)
+        await earlier.telemetry.flush()
+        await earlier.telemetry.shutdown()
+        return earlier
+    }
+
+    @Test("(b) Disabled at launch, then explicitly disabled: a buffer from an earlier launch is never delivered")
+    func killSwitchDiscardsBufferOfEarlierLaunch() async throws {
+        // Given a span left on disk by an earlier launch
+        let earlier = try await makeEarlierLaunch(spanName: "left-by-earlier-launch")
+        defer { earlier.cleanUp() }
+        #expect(!TemporaryDirectory.files(in: earlier.tracesDirectory).isEmpty)
+
+        // And a new launch on the same storage root that starts disabled
+        let sut = try await IntegrationSUT.makeSUT(settings: .disabled, storageRoot: earlier.root)
+        defer { sut.cleanUp() }
+
+        // When the kill switch is thrown explicitly, then telemetry is enabled with the network back
+        await sut.telemetry.update(.disabled)
+        await sut.telemetry.update(enabled)
+        await sut.telemetry.flush()
+
+        // Then nothing was sent and the buffer holds no files
+        #expect(sut.requests.isEmpty)
+        #expect(TemporaryDirectory.files(in: earlier.tracesDirectory).isEmpty)
+        #expect(TemporaryDirectory.files(in: earlier.logsDirectory).isEmpty)
+    }
+
+    @Test("(b) Positive control: without the kill switch, a buffer from an earlier launch is delivered once")
+    func bufferOfEarlierLaunchIsDeliveredWithoutKillSwitch() async throws {
+        // Given a span left on disk by an earlier launch
+        let earlier = try await makeEarlierLaunch(spanName: "left-by-earlier-launch")
+        defer { earlier.cleanUp() }
+
+        // And a new launch that starts disabled, with a working network
+        let sut = try await IntegrationSUT.makeSUT(settings: .disabled, storageRoot: earlier.root)
+        defer { sut.cleanUp() }
+
+        // When it is only enabled, never explicitly disabled
+        await sut.telemetry.update(enabled)
+        await sut.telemetry.flush()
+
+        // Then the old span is delivered exactly once
+        #expect(sut.deliveredTraces.spans.map(\.name) == ["left-by-earlier-launch"])
+    }
+
+    @Test("(b) Disabled at launch and explicitly disabled, never re-enabled: the old buffer is removed from disk")
+    func killSwitchRemovesBufferWithoutReEnabling() async throws {
+        // Given a span left on disk by an earlier launch
+        let earlier = try await makeEarlierLaunch(spanName: "left-by-earlier-launch")
+        defer { earlier.cleanUp() }
+        #expect(!TemporaryDirectory.files(in: earlier.tracesDirectory).isEmpty)
+        let sut = try await IntegrationSUT.makeSUT(settings: .disabled, storageRoot: earlier.root)
+        defer { sut.cleanUp() }
+
+        // When the kill switch is thrown on the dormant telemetry
+        await sut.telemetry.update(.disabled)
+
+        // Then the files are gone, and nothing was sent
+        #expect(TemporaryDirectory.files(in: earlier.tracesDirectory).isEmpty)
+        #expect(TemporaryDirectory.files(in: earlier.logsDirectory).isEmpty)
+        #expect(sut.requests.isEmpty)
+    }
+
+    @Test("(b) Merely starting disabled leaves an earlier launch's buffer untouched")
+    func startingDisabledDoesNotPurge() async throws {
+        // Given a span left on disk by an earlier launch
+        let earlier = try await makeEarlierLaunch(spanName: "left-by-earlier-launch")
+        defer { earlier.cleanUp() }
+        let filesBefore = TemporaryDirectory.files(in: earlier.tracesDirectory).count
+        #expect(filesBefore > 0)
+
+        // When a new launch starts disabled and records something
+        let sut = try await IntegrationSUT.makeSUT(settings: .disabled, storageRoot: earlier.root)
+        defer { sut.cleanUp() }
+        sut.recordSpan(id: 2, name: "while-disabled")
+        await sut.telemetry.flush()
+
+        // Then the buffer is as the earlier launch left it
+        #expect(TemporaryDirectory.files(in: earlier.tracesDirectory).count == filesBefore)
+    }
+
+    /// Makes the earlier launch's `traces` directory immutable, so that removing it fails.
+    /// The returned closure undoes it; call it before the scratch directory is deleted.
+    private func lockTraces(of earlier: IntegrationSUT) throws -> @Sendable () -> Void {
+        let traces = earlier.tracesDirectory.path
+        try FileManager.default.setAttributes([.immutable: true], ofItemAtPath: traces)
+        return { try? FileManager.default.setAttributes([.immutable: false], ofItemAtPath: traces) }
+    }
+
+    @Test("(b) Positive control: with an undeletable buffer and no kill switch, the old buffer is still delivered")
+    func lockedBufferIsDeliveredWithoutKillSwitch() async throws {
+        // Given a span left on disk by an earlier launch, in a directory that cannot be removed
+        let earlier = try await makeEarlierLaunch(spanName: "left-by-earlier-launch")
+        let unlock = try lockTraces(of: earlier)
+        defer {
+            unlock()
+            earlier.cleanUp()
+        }
+        let sut = try await IntegrationSUT.makeSUT(settings: .disabled, storageRoot: earlier.root)
+        defer { sut.cleanUp() }
+
+        // When telemetry is only enabled
+        await sut.telemetry.update(enabled)
+        await sut.telemetry.flush()
+
+        // Then the old span is delivered, so an empty request list in the next test means a closed gate
+        #expect(sut.deliveredTraces.spans.map(\.name).contains("left-by-earlier-launch"))
+    }
+
+    @Test("(b) A buffer that cannot be removed keeps exports closed, even after telemetry is enabled again")
+    func failedPurgeKeepsExportsClosed() async throws {
+        // Given a span left on disk by an earlier launch, in a directory that cannot be removed
+        let earlier = try await makeEarlierLaunch(spanName: "left-by-earlier-launch")
+        let unlock = try lockTraces(of: earlier)
+        defer {
+            unlock()
+            earlier.cleanUp()
+        }
+        let sut = try await IntegrationSUT.makeSUT(settings: .disabled, storageRoot: earlier.root)
+        defer { sut.cleanUp() }
+
+        // When the kill switch is thrown (the purge fails), then telemetry is enabled and flushed
+        await sut.telemetry.update(.disabled)
+        await sut.telemetry.update(enabled)
+        sut.recordSpan(id: 2, name: "after-failed-purge")
+        await sut.telemetry.flush()
+
+        // Then no request left the device
+        #expect(sut.requests.isEmpty)
+    }
+
+    // MARK: A live pipeline
+
+    private func isDirectory(_ url: URL) -> Bool {
+        var flag: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &flag) && flag.boolValue
+    }
+
+    @Test("(b) Disabled with a live pipeline: files the upstream flush leaves behind are removed, directories stay")
+    func liveDiscardLeavesNoFiles() async throws {
+        // Given a live pipeline with a span on disk, and leftovers upstream's flush does not drain
+        // (non-numeric names, which its reader skips)
+        let sut = try await IntegrationSUT.makeSUT(behavior: .offline)
+        defer { sut.cleanUp() }
+        sut.recordSpan(id: 1, name: "stranded")
+        await sut.telemetry.flush()
+        let buffered = try #require(TemporaryDirectory.files(in: sut.tracesDirectory).first)
+        let batch = try Data(contentsOf: buffered)
+        try batch.write(to: sut.tracesDirectory.appending(path: "leftover-batch"))
+        try batch.write(to: sut.logsDirectory.appending(path: "leftover-batch"))
+
+        // When the kill switch is thrown
+        await sut.telemetry.update(.disabled)
+
+        // Then no regular file remains in the buffer, and both directories are still there
+        #expect(TemporaryDirectory.files(in: sut.tracesDirectory).isEmpty)
+        #expect(TemporaryDirectory.files(in: sut.logsDirectory).isEmpty)
+        #expect(isDirectory(sut.tracesDirectory))
+        #expect(isDirectory(sut.logsDirectory))
+
+        // And enabling again with the network back sends nothing old
+        await sut.telemetry.update(enabled)
+        sut.setBehavior(.ok)
+        await sut.telemetry.flush()
+        #expect(sut.deliveredTraces.spans.isEmpty)
+    }
+
+    @Test("(b) Positive control: a live, undeletable buffer is delivered once the network is back and nothing was disabled")
+    func liveLockedBufferIsDeliveredWithoutKillSwitch() async throws {
+        // Given a live pipeline with a span on disk, in a directory that cannot be modified
+        let sut = try await IntegrationSUT.makeSUT(behavior: .offline)
+        sut.recordSpan(id: 1, name: "stranded")
+        await sut.telemetry.flush()
+        let unlock = try lockTraces(of: sut)
+        defer {
+            unlock()
+            sut.cleanUp()
+        }
+
+        // When the network comes back and nothing is disabled
+        sut.setBehavior(.ok)
+        await sut.telemetry.flush()
+
+        // Then the stranded span is delivered, so the next test's empty result means a closed gate
+        #expect(sut.deliveredTraces.spans.map(\.name).contains("stranded"))
+    }
+
+    @Test("(b) A live buffer that cannot be removed keeps exports closed, even after telemetry is enabled again")
+    func failedLiveDiscardKeepsExportsClosed() async throws {
+        // Given a live pipeline with a span on disk, in a directory that cannot be modified
+        let sut = try await IntegrationSUT.makeSUT(behavior: .offline)
+        sut.recordSpan(id: 1, name: "stranded")
+        await sut.telemetry.flush()
+        #expect(!TemporaryDirectory.files(in: sut.tracesDirectory).isEmpty)
+        let unlock = try lockTraces(of: sut)
+        defer {
+            unlock()
+            sut.cleanUp()
+        }
+
+        // When the kill switch is thrown (the removal fails), then telemetry is enabled and flushed
+        await sut.telemetry.update(.disabled)
+        await sut.telemetry.update(enabled)
+        sut.setBehavior(.ok)
+        sut.recordSpan(id: 2, name: "after-failed-discard")
+        await sut.telemetry.flush()
+
+        // Then the stranded span was never sent
+        #expect(sut.deliveredTraces.spans.isEmpty)
+    }
 }

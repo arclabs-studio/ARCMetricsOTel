@@ -16,9 +16,19 @@ While ``TelemetrySettings/isEnabled`` is `false`:
 - the sampler drops every span;
 - the disk buffer stops exporting;
 - anything already batched or buffered is **discarded**, not sent — even if telemetry is enabled
-  again later.
+  again later. That includes records an earlier launch left in the disk buffer.
+
+An upload already in flight when telemetry is disabled is not cancelled: that one request
+completes.
 
 Telemetry configured disabled builds nothing at all until the first update that enables it.
+Starting disabled alone discards nothing: a buffer left by an earlier launch is kept (and sent once
+telemetry is enabled) unless an ``OTelTelemetry/update(_:)`` disables it first.
+
+If your app stores an opt-out of its own (a settings toggle, a cached flag), call
+`update(.disabled)` at launch whenever that opt-out is set, before telemetry is enabled again. The
+discard is not persisted across launches: without that call, a buffer recorded before the opt-out
+survives a relaunch.
 
 ### Sampling
 

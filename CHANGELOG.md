@@ -55,3 +55,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A backlog of more than a few hundred spans or log records flushed at once was silently dropped
   by the disk buffer. Batches are now capped at 100 records and buffered objects at 1 MB.
+- Disabling telemetry now also deletes a disk buffer an earlier launch left, and keeps exports
+  closed until it is gone. Files the disk buffer cannot read are deleted too.
+- A record queued before a disable is dropped even when telemetry is enabled again before it is
+  processed.
+- Records reach the disk buffer only from the telemetry actor (`BufferSpanProcessor`,
+  `BufferLogProcessor` replace upstream's batch processors), so a disable can no longer miss a
+  batch that upstream's worker thread was still handing over.
+
+### Security
+
+- An endpoint with a query or fragment is rejected: credentials belong in `headers`.
+- `AttributeScrubber.default` scrubs URLs under any key, not only `url.*`, and `url.*` values
+  without a scheme. When it is unclear where credentials end (an `@` after the host, or a `?`/`#`
+  before the last `@`), the whole URL becomes `scheme://REDACTED`. Contact values (`mailto:`,
+  `tel:`, `sms:`, `facetime:`, `geo:`, `sip:`, `xmpp:` and variants) are replaced whole, and
+  leading wrappers (`<`, quotes, brackets, backticks, zero-width characters) no longer hide a URL.

@@ -58,15 +58,25 @@ public extension AttributeScrubber {
     ///   `accessToken`, `x-api-key`, `user_id` and `geo.location.lat` are dropped;
     ///   `tokenizer.version` and `latency_ms` are kept. Standard keys such as `server.address` and
     ///   `client.address` are dropped too.
-    /// - For `url.*` string values: replaces credentials with `REDACTED:REDACTED`, as the
-    ///   semantic conventions require for `url.full`, and cuts the query and fragment. Drops
-    ///   `url.query` and `url.fragment`.
+    /// - For URLs — every `url.*` string value, and any string value under any key that starts with
+    ///   a scheme followed by `://` (`http.url`, `deeplink.url`, `link`): replaces credentials with
+    ///   `REDACTED:REDACTED`, as the semantic conventions require for `url.full`, and cuts the query
+    ///   and fragment. A `url.*` value without a scheme (`//user:pw@host`, `user:pw@host`) gets the
+    ///   same treatment. When the credentials' end is ambiguous — a `?` or `#` before the
+    ///   authority's last `@`, or any `@` after the authority — everything after `scheme://`
+    ///   becomes `REDACTED`. Drops `url.query` and `url.fragment`.
+    /// - Replaces a `mailto:`, `tel:`, `telprompt:`, `callto:`, `sms:`, `smsto:`, `facetime:`,
+    ///   `facetime-audio:`, `facetime-prompt:`, `geo:`, `sip:`, `sips:`, `xmpp:` or `im:` value,
+    ///   under any key, with `<scheme>:REDACTED`.
+    /// - Skips leading whitespace, `<`, `"`, `'`, `(`, `[`, `` ` `` and zero-width characters
+    ///   (U+200B, U+200C, U+200D, U+2060, U+FEFF) when detecting a URL or contact scheme, and keeps
+    ///   them in front of the scrubbed value.
     static let `default` = AttributeScrubber { attributes in
         var scrubbed: TraceAttributes = [:]
         for (key, value) in attributes {
             let lowercasedKey = key.lowercased()
             guard !DefaultRules.isDenied(key, lowercased: lowercasedKey) else { continue }
-            scrubbed[key] = lowercasedKey.hasPrefix("url.") ? DefaultRules.scrubbedURL(value) : value
+            scrubbed[key] = DefaultRules.scrubbed(value, isURLKey: lowercasedKey.hasPrefix("url."))
         }
         return scrubbed
     }
@@ -115,25 +125,97 @@ private enum DefaultRules {
         return words
     }
 
-    /// A `url.*` value without credentials, query or fragment.
-    static func scrubbedURL(_ value: TraceAttributeValue) -> TraceAttributeValue {
-        guard case let .string(url) = value else {
-            return value
-        }
-        let end = url.firstIndex { $0 == "?" || $0 == "#" } ?? url.endIndex
-        return .string(redactingCredentials(in: String(url[..<end])))
+    /// URI schemes whose whole value is personal data.
+    static let contactSchemes = ["mailto", "tel", "telprompt", "callto", "sms", "smsto", "facetime",
+                                 "facetime-audio", "facetime-prompt", "geo", "sip", "sips", "xmpp", "im"]
+
+    /// Characters that often wrap a value (`<https://…>`, `"mailto:…"`, `(tel:…)`, `` `…` ``), and
+    /// invisible ones that can lead it: zero-width space, non-joiner and joiner, word joiner and
+    /// byte-order mark.
+    static let wrapperScalars: Set<Unicode.Scalar> = ["<", "\"", "'", "(", "[", "`",
+                                                      "\u{200B}", "\u{200C}", "\u{200D}", "\u{2060}", "\u{FEFF}"]
+
+    /// Whether `character` is skipped when detecting a URL or contact scheme; it is kept in the
+    /// result. Checked per scalar: a joiner merges with the character before it into one `Character`.
+    static func isWrapper(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy { $0.properties.isWhitespace || wrapperScalars.contains($0) }
     }
 
-    /// `scheme://user:password@host/…` → `scheme://REDACTED:REDACTED@host/…`.
+    /// `value` with any URL in it scrubbed. A string is a URL when its key is `url.*` or when it
+    /// starts with a scheme and `://`; a contact-scheme value (`mailto:`, `tel:`, …) is replaced
+    /// whole. Leading wrapper characters are skipped for detection and kept in the result.
+    static func scrubbed(_ value: TraceAttributeValue, isURLKey: Bool) -> TraceAttributeValue {
+        guard case let .string(string) = value else {
+            return value
+        }
+        let bodyStart = string.firstIndex { !isWrapper($0) } ?? string.endIndex
+        let prefix = String(string[..<bodyStart])
+        let body = String(string[bodyStart...])
+        let lowercasedBody = body.lowercased()
+        if let scheme = contactSchemes.first(where: { lowercasedBody.hasPrefix($0 + ":") }) {
+            return .string(prefix + scheme + ":REDACTED")
+        }
+        guard isURLKey || schemeSeparator(in: body) != nil else {
+            return value
+        }
+        return .string(prefix + scrubbedURL(body))
+    }
+
+    /// The `://` after a leading scheme, a scheme being a letter followed by letters, digits, `+`,
+    /// `.` or `-` (RFC 3986); `nil` when `string` does not start with one.
+    static func schemeSeparator(in string: String) -> Range<String.Index>? {
+        guard let separator = string.range(of: "://"),
+              let first = string.first,
+              first.isASCII,
+              first.isLetter else {
+            return nil
+        }
+        let isScheme = string[..<separator.lowerBound].allSatisfy { character in
+            character.isASCII && (character.isLetter || character.isNumber || "+.-".contains(character))
+        }
+        return isScheme ? separator : nil
+    }
+
+    /// Where the authority starts: after `scheme://`, after a leading `//`, or at the start of a
+    /// `url.*` value with neither.
+    static func authorityStart(of url: String) -> String.Index {
+        if let separator = schemeSeparator(in: url) {
+            return separator.upperBound
+        }
+        return url.hasPrefix("//") ? url.index(url.startIndex, offsetBy: 2) : url.startIndex
+    }
+
+    /// `url` without credentials, query or fragment.
+    ///
+    /// Two shapes hide where the credentials end, so everything after the scheme (or `//`) is
+    /// redacted instead of cut:
+    /// - a `?` or `#` before the authority's last `@` (`https://user:p?ss@host`);
+    /// - an `@` anywhere after the authority (`https://user:pa/ss@host`, `https://tok/en@host`,
+    ///   `https://user:p@ss/word@host`), where a credential holds a `/`. This also redacts an `@`
+    ///   in an ordinary path, query or fragment (`https://host/@me`, `?email=a@b`), which is
+    ///   accepted for a backstop.
+    static func scrubbedURL(_ url: String) -> String {
+        let start = authorityStart(of: url)
+        let authorityEnd = url[start...].firstIndex(of: "/") ?? url.endIndex
+        let authority = url[start ..< authorityEnd]
+        let delimiterInUserInfo = authority.lastIndex(of: "@").map { at in
+            authority[..<at].contains { $0 == "?" || $0 == "#" }
+        } ?? false
+        if delimiterInUserInfo || url[authorityEnd...].contains("@") {
+            return url[..<start] + "REDACTED"
+        }
+        let end = url.firstIndex { $0 == "?" || $0 == "#" } ?? url.endIndex
+        return redactingCredentials(in: String(url[..<end]))
+    }
+
+    /// `scheme://user:password@host/…` → `scheme://REDACTED:REDACTED@host/…`; also without a
+    /// scheme (`//user:password@host`, `user:password@host`).
     static func redactingCredentials(in url: String) -> String {
-        guard let schemeEnd = url.range(of: "://") else {
+        let start = authorityStart(of: url)
+        let authorityEnd = url[start...].firstIndex(of: "/") ?? url.endIndex
+        guard let at = url[start ..< authorityEnd].lastIndex(of: "@") else {
             return url
         }
-        let authorityEnd = url[schemeEnd.upperBound...].firstIndex(of: "/") ?? url.endIndex
-        let authority = url[schemeEnd.upperBound ..< authorityEnd]
-        guard let at = authority.lastIndex(of: "@") else {
-            return url
-        }
-        return url[..<schemeEnd.upperBound] + "REDACTED:REDACTED" + url[at...]
+        return url[..<start] + "REDACTED:REDACTED" + url[at...]
     }
 }

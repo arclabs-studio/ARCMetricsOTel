@@ -26,6 +26,8 @@ public actor OTelTelemetry {
     private var tracker: SessionTracker
     private var openSpans: [UInt64: any Span] = [:]
     private var consumer: Task<Void, Never>?
+    /// Writes the pending batch once ``OTelDependencies/scheduleDelay`` has passed.
+    private var batchTimer: Task<Void, Never>?
     private var shutdownTask: Task<Void, Never>?
 
     init(configuration: OTelConfiguration, dependencies: OTelDependencies) {
@@ -127,26 +129,29 @@ public actor OTelTelemetry {
 
     //
     // While the kill switch is off these return before reading the clock or enqueuing, so a
-    // disabled app pays almost nothing per call. `handle(_:)` still drops anything enqueued just
-    // before a disable.
+    // disabled app pays almost nothing per call. Each command carries the gate's discard
+    // generation: `handle(_:)` drops anything enqueued before a disable, even when telemetry is
+    // enabled again by the time the command is processed.
 
     /// Enqueues the start of a span.
     nonisolated func startSpan(id: UInt64,
                                name: String,
                                parentID: UInt64?,
                                attributes: TraceAttributes) {
-        guard gate.isEnabled else { return }
-        ingress.send(.startSpan(SpanStart(id: id,
-                                          name: name,
-                                          parentID: parentID,
-                                          attributes: attributes,
-                                          time: clock.now)))
+        guard let generation = gate.admission else { return }
+        ingress.send(.admitted(.startSpan(SpanStart(id: id,
+                                                    name: name,
+                                                    parentID: parentID,
+                                                    attributes: attributes,
+                                                    time: clock.now)),
+                               generation: generation))
     }
 
     /// Enqueues the end of a span. `errorType` marks it failed.
     nonisolated func endSpan(id: UInt64, errorType: String?, attributes: TraceAttributes) {
-        guard gate.isEnabled else { return }
-        ingress.send(.endSpan(SpanEnd(id: id, errorType: errorType, attributes: attributes, time: clock.now)))
+        guard let generation = gate.admission else { return }
+        ingress.send(.admitted(.endSpan(SpanEnd(id: id, errorType: errorType, attributes: attributes, time: clock.now)),
+                               generation: generation))
     }
 
     /// Enqueues a log event, timestamped `timestamp` or now.
@@ -156,25 +161,27 @@ public actor OTelTelemetry {
                                attributes: TraceAttributes,
                                severity: Severity,
                                timestamp: Date? = nil) {
-        guard gate.isEnabled else { return }
+        guard let generation = gate.admission else { return }
         let now = clock.now
-        ingress.send(.event(EventRecord(name: name,
-                                        attributes: attributes,
-                                        severity: severity,
-                                        time: timestamp ?? now,
-                                        sessionTime: now)))
+        ingress.send(.admitted(.event(EventRecord(name: name,
+                                                  attributes: attributes,
+                                                  severity: severity,
+                                                  time: timestamp ?? now,
+                                                  sessionTime: now)),
+                               generation: generation))
     }
 
     /// Enqueues a span that ran from `start` to `end`, with no parent.
     ///
     /// The span joins the session current now, even when it ran in the past.
     nonisolated func recordSpan(name: String, attributes: TraceAttributes, start: Date, end: Date) {
-        guard gate.isEnabled else { return }
-        ingress.send(.completedSpan(CompletedSpan(name: name,
-                                                  attributes: attributes,
-                                                  start: start,
-                                                  end: end,
-                                                  sessionTime: clock.now)))
+        guard let generation = gate.admission else { return }
+        ingress.send(.admitted(.completedSpan(CompletedSpan(name: name,
+                                                            attributes: attributes,
+                                                            start: start,
+                                                            end: end,
+                                                            sessionTime: clock.now)),
+                               generation: generation))
     }
 }
 
@@ -218,12 +225,13 @@ private extension OTelTelemetry {
     func applyGate() {
         if let discard = gate.pendingDiscard {
             openSpans.removeAll()
-            // Exports stay closed while a discard is pending, so this flush deletes what is
-            // batched or on disk instead of sending it.
-            pipeline?.flush(timeout: configuration.exportTimeout.timeInterval)
-            gate.completeDiscard(discard)
+            if discardBuffered() {
+                gate.completeDiscard(discard)
+            }
         }
-        guard gate.isEnabled, pipeline == nil, !isShutDown else {
+        // A discard still pending means the old buffer could not be removed: stay dormant rather
+        // than buffer new records beside it, and let the next `update(_:)` retry the purge.
+        guard gate.isEnabled, pipeline == nil, !isShutDown, gate.pendingDiscard == nil else {
             return
         }
         do {
@@ -234,20 +242,44 @@ private extension OTelTelemetry {
         }
     }
 
+    /// Deletes everything batched or buffered, including what an earlier launch left on disk.
+    ///
+    /// Returns `false` when the disk buffer could not be removed. The discard then stays pending:
+    /// exports stay closed, no pipeline is built, and the next ``update(_:)`` tries again.
+    func discardBuffered() -> Bool {
+        if let pipeline {
+            // Records still in memory are dropped here, on the actor that batched them, including
+            // any made after a re-enable that was processed before this discard. Exports
+            // stay closed while a discard is pending, so the flush deletes what is on disk
+            // instead of sending it.
+            pipeline.discardPending()
+            pipeline.flush(timeout: configuration.exportTimeout.timeInterval)
+            // Upstream's reader skips files it cannot name or read, and swallows delete errors:
+            // remove whatever the flush left behind.
+            return (try? storage.removeBufferedFiles()) != nil
+        }
+        // No pipeline (telemetry started disabled, or shut down): remove the files directly.
+        return (try? storage.purge()) != nil
+    }
+
     func performShutdown() async {
         ingress.finish()
         await consumer?.value
+        batchTimer?.cancel()
         pipeline?.shutdown(timeout: configuration.exportTimeout.timeInterval)
         pipeline = nil
         openSpans.removeAll()
     }
 
+    var storage: StorageLocation {
+        StorageLocation(root: dependencies.storageRoot ?? StorageLocation.defaultRoot())
+    }
+
     func buildPipeline() throws(OTelBootstrapError) -> Pipeline {
-        let root = dependencies.storageRoot ?? StorageLocation.defaultRoot()
-        return try PipelineFactory.make(configuration: configuration,
-                                        dependencies: dependencies,
-                                        gate: gate,
-                                        storage: StorageLocation(root: root))
+        try PipelineFactory.make(configuration: configuration,
+                                 dependencies: dependencies,
+                                 gate: gate,
+                                 storage: storage)
     }
 
     func handle(_ command: TelemetryCommand) {
@@ -259,10 +291,33 @@ private extension OTelTelemetry {
             return
         }
         handle(command, in: pipeline)
+        scheduleWrite(for: pipeline)
+    }
+
+    /// Starts the batch timer when records are waiting and no timer is running.
+    func scheduleWrite(for pipeline: Pipeline) {
+        guard batchTimer == nil, pipeline.hasPending else { return }
+        let delay = dependencies.scheduleDelay
+        // Captures `self` weakly, like the consumer, and hops onto the actor when it fires.
+        batchTimer = Task { [weak self] in
+            // A cancelled timer (shutdown) writes nothing: the shutdown flush already did.
+            guard await (try? Task.sleep(for: .seconds(delay))) != nil else { return }
+            await self?.writePending()
+        }
+    }
+
+    /// Writes the pending batch to the disk buffer; the next record starts a new timer.
+    func writePending() {
+        batchTimer = nil
+        pipeline?.writePending()
     }
 
     func handle(_ command: TelemetryCommand, in pipeline: Pipeline) {
         switch command {
+        case let .admitted(command, generation):
+            // Telemetry was disabled after this record was made: that discard already covers it.
+            guard !gate.isStale(generation) else { return }
+            handle(command, in: pipeline)
         case let .barrier(continuation):
             continuation.resume()
         case let .startSpan(start):

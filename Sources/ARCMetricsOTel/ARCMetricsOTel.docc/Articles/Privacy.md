@@ -25,11 +25,24 @@ conventions and Apple's App Privacy data types:
   `privatekey`, `userid` — splitting keys on `.`, `_`, `-` and camelCase and also joining adjacent
   words, so `x-api-key` and `user_id` are dropped. This also drops standard keys such as
   `server.address` and `client.address`.
-- In `url.*` values it replaces credentials with `REDACTED:REDACTED`, as the semantic conventions
-  require, and cuts the query and fragment; `url.query` and `url.fragment` are dropped.
+- In URLs it replaces credentials with `REDACTED:REDACTED`, as the semantic conventions
+  require, and cuts the query and fragment; `url.query` and `url.fragment` are dropped. A URL is
+  any `url.*` value, and any string value under any key that starts with a scheme and `://`
+  (`http.url`, `deeplink.url`, `link`). A `url.*` value without a scheme (`//user:pw@host`)
+  is treated the same way. When it is unclear where credentials end — a `?` or `#` before the
+  authority's last `@` (`https://user:p?ss@host`), or any `@` after the authority
+  (`https://user:pa/ss@host`) — everything after `scheme://` becomes `REDACTED`. That also
+  redacts an `@` in an ordinary path, query or fragment (`https://host/@me`, `?email=a@b`).
+- A `mailto:`, `tel:`, `telprompt:`, `callto:`, `sms:`, `smsto:`, `facetime:`, `facetime-audio:`,
+  `facetime-prompt:`, `geo:`, `sip:`, `sips:`, `xmpp:` or `im:` value, under any key, becomes
+  `<scheme>:REDACTED`.
+- Leading whitespace, `<`, `"`, `'`, `(`, `[`, `` ` `` and zero-width characters are skipped when
+  looking for a URL or contact scheme, so `<https://…>` and `(mailto:…)` are scrubbed too.
 
 The default is a **best-effort backstop**, not a guarantee: a key such as `customer`, `ip` or
-`nickname` passes. Add your own rules after it:
+`nickname` passes, and so does a URL in the middle of a string. Never put an error's description in
+an attribute: Foundation errors carry the full request URL (`NSErrorFailingURLStringKey`), query
+and all. Record a constant error type instead. Add your own rules after the default:
 
 ```swift
 let scrubber = AttributeScrubber.default.then(AttributeScrubber { attributes in

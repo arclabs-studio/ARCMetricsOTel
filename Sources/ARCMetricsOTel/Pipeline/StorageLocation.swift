@@ -40,4 +40,31 @@ struct StorageLocation {
         var root = root
         try root.setResourceValues(values)
     }
+
+    /// Deletes the buffered spans and log records, including any left by an earlier launch.
+    /// Missing directories are skipped; ``prepare()`` recreates them.
+    func purge() throws {
+        for directory in [traces, logs]
+            where FileManager.default.fileExists(atPath: directory.path(percentEncoded: false)) {
+            try FileManager.default.removeItem(at: directory)
+        }
+    }
+
+    /// Deletes every regular file in both directories, whatever its name, and keeps the directories.
+    /// Missing directories are skipped and not created.
+    func removeBufferedFiles() throws {
+        let manager = FileManager.default
+        for directory in [traces, logs] where manager.fileExists(atPath: directory.path(percentEncoded: false)) {
+            let files = try manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isRegularFileKey])
+            for file in files where try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true {
+                do {
+                    try manager.removeItem(at: file)
+                } catch {
+                    // Upstream ages out and trims batches on its own queue: a file it deleted
+                    // in the meantime is gone, which is all this asks for.
+                    guard !manager.fileExists(atPath: file.path(percentEncoded: false)) else { throw error }
+                }
+            }
+        }
+    }
 }

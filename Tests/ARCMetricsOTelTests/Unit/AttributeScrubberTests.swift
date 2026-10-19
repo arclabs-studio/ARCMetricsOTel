@@ -103,7 +103,7 @@ import Testing
                       ("https://user@x.test/a", "https://REDACTED:REDACTED@x.test/a"),
                       ("https://user:p%40ss@x.test:8443/a#f", "https://REDACTED:REDACTED@x.test:8443/a"),
                       ("https://user:pass@x.test", "https://REDACTED:REDACTED@x.test"),
-                      ("https://x.test/a@b", "https://x.test/a@b")])
+                      ("https://x.test/a@b", "https://REDACTED")])
     func redactsURLCredentials(raw: String, expected: String) {
         #expect(sut.scrub(["url.full": .string(raw)]) == ["url.full": .string(expected)])
     }

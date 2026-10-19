@@ -4,7 +4,12 @@ import Foundation
 ///
 /// Timestamps are read when the command is created, not when the actor processes it, so a
 /// backlog never skews them.
-enum TelemetryCommand {
+/// `Sendable` is spelled out: Swift does not infer it for an `indirect` enum. The compiler still
+/// checks every payload.
+indirect enum TelemetryCommand: Sendable {
+    /// A recording command, tagged with the gate's discard generation when it was made
+    /// (``TelemetryGate/admission``).
+    case admitted(TelemetryCommand, generation: Int)
     case startSpan(SpanStart)
     case endSpan(SpanEnd)
     case event(EventRecord)
