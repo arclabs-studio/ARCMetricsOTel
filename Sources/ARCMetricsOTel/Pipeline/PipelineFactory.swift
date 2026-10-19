@@ -34,7 +34,6 @@ enum PipelineFactory {
         } catch {
             throw .storageUnavailable
         }
-        let timeout = configuration.exportTimeout.timeInterval
         let device = DeviceInfo.current(environment: dependencies.environment,
                                         operatingSystemVersion: dependencies.operatingSystemVersion,
                                         machine: dependencies.machine)
@@ -53,14 +52,8 @@ enum PipelineFactory {
                                                         storageURL: storage.logs,
                                                         exportCondition: allowsExport,
                                                         performancePreset: dependencies.performancePreset)
-        let spanProcessor = BatchSpanProcessor(spanExporter: spanBuffer,
-                                               scheduleDelay: dependencies.scheduleDelay,
-                                               exportTimeout: timeout,
-                                               maxExportBatchSize: maxExportBatchSize)
-        let logProcessor = BatchLogRecordProcessor(logRecordExporter: logBuffer,
-                                                   scheduleDelay: dependencies.scheduleDelay,
-                                                   exportTimeout: timeout,
-                                                   maxExportBatchSize: maxExportBatchSize)
+        let spanProcessor = BufferSpanProcessor(buffer: spanBuffer, maxBatchSize: maxExportBatchSize)
+        let logProcessor = BufferLogProcessor(buffer: logBuffer, maxBatchSize: maxExportBatchSize)
         let tracerProvider = TracerProviderBuilder()
             .with(resource: resource)
             .with(sampler: SessionSampler(gate: gate))
@@ -75,9 +68,7 @@ enum PipelineFactory {
                         tracer: tracerProvider.get(instrumentationName: scopeName),
                         logger: loggerProvider.loggerBuilder(instrumentationScopeName: scopeName).build(),
                         spanProcessor: spanProcessor,
-                        logProcessor: logProcessor,
-                        spanBuffer: spanBuffer,
-                        logBuffer: logBuffer)
+                        logProcessor: logProcessor)
     }
 }
 

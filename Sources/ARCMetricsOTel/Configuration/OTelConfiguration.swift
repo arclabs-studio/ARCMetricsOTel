@@ -27,13 +27,17 @@ public struct OTelConfiguration: Sendable {
     ///
     /// Must be `https`, unless the host is `localhost` / a loopback address or, in Debug builds,
     /// ``allowsInsecureTransport`` is `true`. Credentials belong in ``headers``: an endpoint with
-    /// a user name or password is rejected.
+    /// a user name, a password, a query or a fragment is rejected.
     public var endpoint: URL
 
     /// HTTP headers sent with every export request, typically authentication.
     public var headers: [String: String]
 
     /// The settings in force until the first ``OTelTelemetry/update(_:)``.
+    ///
+    /// Starting disabled discards nothing: a buffer an earlier launch left on disk is kept, and
+    /// sent once telemetry is enabled. If your app stores an opt-out of its own, call
+    /// `update(.disabled)` at launch whenever it is set, so that buffer is deleted.
     public var initialSettings: TelemetrySettings
 
     /// When sessions end.

@@ -50,6 +50,17 @@ Accepted as upstream debt, not repeated in our code:
   exporter (observed 2026-10-09: 0 of 1,000 spans and 0 of 1,000 log records). We cap
   `maxExportBatchSize` at 100 for spans and logs and allow objects up to 1 MB. The cap counts
   records, not bytes, so a batch of records with very large attributes can still be dropped.
+- **Batch processors hand over from their own thread.** `BatchSpanProcessor` and
+  `BatchLogRecordProcessor` take a batch under their lock and only then queue its export, so
+  `forceFlush` can return while a batch is still on its way to the disk buffer. A kill-switch
+  discard could then delete the buffer before that pre-disable batch was written, and a later
+  re-enable would send it. `BufferSpanProcessor` and `BufferLogProcessor` replace them: they
+  batch on the `OTelTelemetry` thread, which also runs the batch timer and the discard, so a
+  discard sees every record either pending (dropped) or written (deleted). Writing each record
+  on its own was tried and rejected (2026-10-17): every record became a file, a flush against a
+  hanging collector waited one timeout per file, and the reader's unsorted file order reordered
+  records. Upstream's persistence `shutdown` also never stops its `DataExportWorker`, which
+  rules out rebuilding the pipeline on each discard.
 - **Unsafe defaults we override.** `requeueOnFailure` defaults to `true` (double delivery with the
   disk buffer) — always `false`. `envVarHeaders` reads the process environment — always `nil`.
 - **Protobuf only.** The OTLP/HTTP exporters always send `application/x-protobuf` and ignore

@@ -8,6 +8,9 @@
 /// ```
 public struct TelemetrySettings: Sendable, Equatable {
     /// The kill switch. While `false`, nothing is recorded, buffered or exported.
+    ///
+    /// Each ``OTelTelemetry/update(_:)`` that sets it to `false` also discards what is batched or
+    /// buffered, including records an earlier launch left on disk. Starting disabled alone keeps them.
     public let isEnabled: Bool
 
     /// The fraction of sessions whose records are kept, in `0...1`.
