@@ -20,6 +20,7 @@ parent_config: .swiftlint.base.yml
 included:
   - Sources
   - Tests
+  - Examples
 
 # Add project-local rule tweaks below (overrides .swiftlint.base.yml).
 # Example:
